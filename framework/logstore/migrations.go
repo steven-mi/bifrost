@@ -288,6 +288,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"logs_recreate_matviews_with_app_column"}, run: migrationRecreateMatViewsWithUserAgentColumn},
 	{IDs: []string{"mcp_tool_logs_add_endpoint_columns"}, run: migrationAddEndpointColumnsToMCPToolLogs},
 	{IDs: []string{"mcp_tool_logs_add_plugin_logs_column"}, run: migrationAddMCPPluginLogsColumn},
+	{IDs: []string{"logs_add_batch_debug_column"}, run: migrationAddBatchDebugColumn},
 }
 
 // areThereAnyPendingMigrations returns true if there are any pending migrations to be applied.
@@ -2890,6 +2891,32 @@ func migrationAddMCPPluginLogsColumn(ctx context.Context, db *gorm.DB, logger sc
 	}})
 	if err := m.Migrate(); err != nil {
 		return fmt.Errorf("error while adding MCP plugin logs column: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddBatchDebugColumn adds the batch_debug column to the logs table.
+// It carries provider request counts on batch rows and the per-model pricing
+// breakdown on the aggregate cost row. Nullable and unindexed, so this is a
+// metadata-only DDL change with no table rewrite and no backfill: rows written
+// before it simply have no batch detail.
+func migrationAddBatchDebugColumn(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	migrationName := "logs_add_batch_debug_column"
+	logger.Info("[logstore] starting migration %s", migrationName)
+	defer logger.Info("[logstore] finished migration %s", migrationName)
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = true
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: migrationName,
+		Migrate: func(tx *gorm.DB) error {
+			return addColumnIfNotExists(tx.WithContext(ctx), logger, &Log{}, "batch_debug")
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return dropColumnIfExists(tx.WithContext(ctx), logger, &Log{}, "batch_debug")
+		},
+	}})
+	if err := m.Migrate(); err != nil {
+		return fmt.Errorf("error while adding batch_debug column: %s", err.Error())
 	}
 	return nil
 }
