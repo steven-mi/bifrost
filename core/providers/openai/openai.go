@@ -6401,8 +6401,9 @@ func (provider *OpenAIProvider) BatchResults(ctx *schemas.BifrostContext, keys [
 		})
 
 		batchResultsResp := &schemas.BifrostBatchResultsResponse{
-			BatchID: request.BatchID,
-			Results: results,
+			BatchID:  request.BatchID,
+			Endpoint: schemas.BatchEndpoint(batchResp.Endpoint),
+			Results:  results,
 			ExtraFields: schemas.BifrostResponseExtraFields{
 				Latency: latency.Milliseconds(),
 			},
