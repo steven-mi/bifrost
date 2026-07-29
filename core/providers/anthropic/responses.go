@@ -5593,7 +5593,7 @@ func convertAnthropicContentBlocksToResponsesMessagesGrouped(contentBlocks []Ant
 					},
 				}
 				if isOutputMessage {
-					bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+					bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 				}
 				bifrostMessages = append(bifrostMessages, bifrostMsg)
 			}
@@ -5609,7 +5609,7 @@ func convertAnthropicContentBlocksToResponsesMessagesGrouped(contentBlocks []Ant
 					},
 				}
 				if isOutputMessage {
-					bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+					bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 				}
 				bifrostMessages = append(bifrostMessages, bifrostMsg)
 			}
@@ -5624,14 +5624,14 @@ func convertAnthropicContentBlocksToResponsesMessagesGrouped(contentBlocks []Ant
 					},
 				}
 				if isOutputMessage {
-					bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+					bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 				}
 				bifrostMessages = append(bifrostMessages, bifrostMsg)
 			}
 
 		case AnthropicContentBlockTypeThinking:
 			if block.Thinking != nil {
-				id := new("rs_" + providerUtils.GetRandomString(50))
+				id := new("rs_" + schemas.GetRandomString(50))
 				var recoveredID *string
 				signature := block.Signature
 				if signature != nil {
@@ -5665,7 +5665,7 @@ func convertAnthropicContentBlocksToResponsesMessagesGrouped(contentBlocks []Ant
 			// Handle redacted thinking (encrypted content)
 			if block.Data != nil {
 				encryptedContent := *block.Data
-				id := new("rs_" + providerUtils.GetRandomString(50))
+				id := new("rs_" + schemas.GetRandomString(50))
 				var recoveredID *string
 				if extractedID, rest, ok := providerUtils.ExtractReasoningItemID(*block.Data); ok {
 					id = extractedID
@@ -5799,7 +5799,7 @@ func convertAnthropicContentBlocksToResponsesMessagesGrouped(contentBlocks []Ant
 			Role: role,
 		}
 		if isOutputMessage {
-			bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+			bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 			bifrostMsg.Content = &schemas.ResponsesMessageContent{
 				ContentBlocks: accumulatedTextContent,
 			}
@@ -5820,7 +5820,7 @@ func convertAnthropicContentBlocksToResponsesMessagesGrouped(contentBlocks []Ant
 				},
 			}
 			if isOutputMessage {
-				bifrostMsg.ID = schemas.Ptr("fc_" + providerUtils.GetRandomString(50))
+				bifrostMsg.ID = schemas.Ptr("fc_" + schemas.GetRandomString(50))
 			}
 
 			// Check for computer tool use
@@ -5895,7 +5895,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 				}
 
 				bifrostMsg := schemas.ResponsesMessage{
-					ID:     schemas.Ptr("cmp_" + providerUtils.GetRandomString(50)),
+					ID:     schemas.Ptr("cmp_" + schemas.GetRandomString(50)),
 					Type:   schemas.Ptr(schemas.ResponsesMessageTypeMessage),
 					Role:   role,
 					Status: schemas.Ptr("completed"),
@@ -5926,7 +5926,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 				fallback.TriggerCategory = block.Trigger.Category
 			}
 			bifrostMessages = append(bifrostMessages, schemas.ResponsesMessage{
-				ID:     schemas.Ptr("fb_" + providerUtils.GetRandomString(50)),
+				ID:     schemas.Ptr("fb_" + schemas.GetRandomString(50)),
 				Type:   schemas.Ptr(schemas.ResponsesMessageTypeMessage),
 				Role:   role,
 				Status: schemas.Ptr("completed"),
@@ -5971,7 +5971,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 					}
 
 					bifrostMsg = schemas.ResponsesMessage{
-						ID:     schemas.Ptr("msg_" + providerUtils.GetRandomString(50)),
+						ID:     schemas.Ptr("msg_" + schemas.GetRandomString(50)),
 						Type:   schemas.Ptr(schemas.ResponsesMessageTypeMessage),
 						Role:   role,
 						Status: schemas.Ptr("completed"),
@@ -6007,7 +6007,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 					},
 				}
 				if isOutputMessage {
-					bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+					bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 				}
 				bifrostMessages = append(bifrostMessages, bifrostMsg)
 			}
@@ -6021,7 +6021,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 					},
 				}
 				if isOutputMessage {
-					bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+					bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 				}
 				bifrostMessages = append(bifrostMessages, bifrostMsg)
 			}
@@ -6035,7 +6035,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 					},
 				}
 				if isOutputMessage {
-					bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+					bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 				}
 				bifrostMessages = append(bifrostMessages, bifrostMsg)
 			}
@@ -6074,7 +6074,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 				}
 				id := extractedID
 				if id == nil {
-					id = new("rs_" + providerUtils.GetRandomString(50))
+					id = new("rs_" + schemas.GetRandomString(50))
 				}
 				bifrostMsg := schemas.ResponsesMessage{
 					ID:   id,
@@ -6115,7 +6115,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 					},
 				}
 				if isOutputMessage {
-					bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+					bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 				}
 				bifrostMessages = append(bifrostMessages, bifrostMsg)
 			} else {
@@ -6131,7 +6131,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 						},
 					}
 					if isOutputMessage {
-						bifrostMsg.ID = schemas.Ptr("fc_" + providerUtils.GetRandomString(50))
+						bifrostMsg.ID = schemas.Ptr("fc_" + schemas.GetRandomString(50))
 					}
 
 					// here need to check for computer tool use
@@ -6394,7 +6394,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 					},
 				}
 				if isOutputMessage {
-					bifrostMsg.ID = schemas.Ptr("msg_" + providerUtils.GetRandomString(50))
+					bifrostMsg.ID = schemas.Ptr("msg_" + schemas.GetRandomString(50))
 				}
 				// Initialize the nested struct before any writes
 				bifrostMsg.ResponsesToolMessage.Output = &schemas.ResponsesToolMessageOutputStruct{}
@@ -6436,7 +6436,7 @@ func convertAnthropicContentBlocksToResponsesMessages(ctx *schemas.BifrostContex
 	if len(reasoningContentBlocks) > 0 {
 		id := reasoningItemID
 		if id == nil {
-			id = new("rs_" + providerUtils.GetRandomString(50))
+			id = new("rs_" + schemas.GetRandomString(50))
 		}
 		reasoningMessage := schemas.ResponsesMessage{
 			ID:   id,

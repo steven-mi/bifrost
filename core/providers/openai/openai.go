@@ -934,7 +934,9 @@ func HandleOpenAIChatCompletionRequest(
 	// A 200 is not proof of success on every OpenAI-compatible provider: some report
 	// failures in-band once the status line is already committed. Left unchecked those
 	// surface to the caller as a 200 with null choices and null usage.
-	if inBandErr := ErrorInSuccessfulChatBody(body); inBandErr != nil {
+	// body was just validated by HandleProviderResponse's sonic.Unmarshal, so
+	// skip the redundant gjson.ValidBytes rescan in ErrorInSuccessfulChatBody.
+	if inBandErr := errorInValidatedChatBody(body); inBandErr != nil {
 		logger.Debug("in-band error on a 200 from %s provider: %s", providerName, inBandErr.Error.Message)
 		return nil, providerUtils.EnrichError(ctx, inBandErr, jsonData, body, sendBackRawRequest, sendBackRawResponse, latency)
 	}
