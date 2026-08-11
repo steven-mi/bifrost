@@ -2,6 +2,8 @@ package replicate
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
@@ -179,6 +181,88 @@ func ToBifrostImageGenerationResponse(
 	}
 
 	return response, nil
+}
+
+// applyUpscaleOutputResolution backfills ImageGenerationResponseParameters.Size
+// on an upscale-style response (e.g. prunaai/p-image-upscale) whose output
+// resolution isn't otherwise knowable: these models take an input image plus
+// a "target" (desired output megapixels) or "factor" (multiplier on the input
+// image's dimensions) parameter instead of a plain size string, so neither
+// the request's Params.Size nor the provider's own response carries any
+// resolution info by default. Without this, resolution-tiered image pricing
+// silently falls back to the base per-image rate regardless of actual output
+// size. No-op (leaves Size untouched) when neither signal is present.
+func applyUpscaleOutputResolution(request *schemas.BifrostImageGenerationRequest, prediction *ReplicatePredictionResponse, response *schemas.BifrostImageGenerationResponse) {
+	if request == nil || response == nil {
+		return
+	}
+	pixels := resolveUpscaleOutputPixels(request, prediction)
+	if pixels <= 0 {
+		return
+	}
+	if response.ImageGenerationResponseParameters == nil {
+		response.ImageGenerationResponseParameters = &schemas.ImageGenerationResponseParameters{}
+	}
+	if response.ImageGenerationResponseParameters.Size == "" {
+		response.ImageGenerationResponseParameters.Size = formatSquarePixelSize(pixels)
+	}
+}
+
+// resolveUpscaleOutputPixels estimates the total output pixel count for an
+// upscale-style request, in priority order:
+//  1. "target" mode: the request declares its desired output resolution in
+//     megapixels directly (e.g. target: 16) — known before the call is made.
+//  2. "factor" mode: output size depends on the input image's own resolution
+//     (unknown to Bifrost), so we fall back to the megapixel band Replicate
+//     itself reports post-hoc via metrics.resolution_target (e.g. "8-16MP").
+//
+// Returns 0 when neither signal is present.
+func resolveUpscaleOutputPixels(request *schemas.BifrostImageGenerationRequest, prediction *ReplicatePredictionResponse) int {
+	if request == nil || request.Params == nil || request.Params.ExtraParams == nil {
+		return resolveUpscaleOutputPixelsFromMetrics(prediction)
+	}
+	extraParams := request.Params.ExtraParams
+
+	upscaleMode, _ := schemas.SafeExtractString(extraParams["upscale_mode"])
+	if upscaleMode == "" || upscaleMode == "target" {
+		if targetMP, ok := schemas.SafeExtractFloat64(extraParams["target"]); ok && targetMP > 0 {
+			return int(targetMP * 1_000_000)
+		}
+	}
+
+	return resolveUpscaleOutputPixelsFromMetrics(prediction)
+}
+
+// resolveUpscaleOutputPixelsFromMetrics parses a megapixel band string like
+// "8-16MP" or "16MP" from the prediction's metrics.resolution_target field.
+// Uses the upper bound of the band as the billable pixel estimate — the
+// conservative choice, since underestimating post-hoc would under-bill.
+func resolveUpscaleOutputPixelsFromMetrics(prediction *ReplicatePredictionResponse) int {
+	if prediction == nil || prediction.Metrics == nil || prediction.Metrics.ResolutionTarget == nil {
+		return 0
+	}
+	band := strings.ToUpper(strings.TrimSpace(*prediction.Metrics.ResolutionTarget))
+	band = strings.TrimSuffix(band, "MP")
+	if band == "" {
+		return 0
+	}
+	parts := strings.Split(band, "-")
+	upper := strings.TrimSpace(parts[len(parts)-1])
+	mp, err := strconv.ParseFloat(upper, 64)
+	if err != nil || mp <= 0 {
+		return 0
+	}
+	return int(mp * 1_000_000)
+}
+
+// formatSquarePixelSize formats a total pixel count as a "WxH" size string
+// for ImageGenerationResponseParameters.Size, using a square approximation
+// (side = ceil(sqrt(pixels))). Rounding up guarantees width*height never
+// falls below the true pixel count, so a value sitting exactly on a pricing
+// tier's threshold is never miscategorized into the tier below it.
+func formatSquarePixelSize(pixels int) string {
+	side := int(math.Ceil(math.Sqrt(float64(pixels))))
+	return fmt.Sprintf("%dx%d", side, side)
 }
 
 // getInputImageFieldName returns the appropriate input image field name based on the model.

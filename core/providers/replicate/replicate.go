@@ -1833,6 +1833,11 @@ func (provider *ReplicateProvider) ImageGeneration(ctx *schemas.BifrostContext, 
 		return nil, providerUtils.EnrichError(ctx, err, jsonData, nil, provider.sendBackRawRequest, provider.sendBackRawResponse, latency)
 	}
 
+	// Backfill output resolution for upscale-style models (target/factor
+	// input, no plain size param) so resolution-tiered cost calculation
+	// doesn't silently fall back to the base per-image rate.
+	applyUpscaleOutputResolution(request, prediction, bifrostResponse)
+
 	// Set extra fields
 	bifrostResponse.ExtraFields.Latency = latency.Milliseconds()
 	bifrostResponse.ExtraFields.ProviderResponseHeaders = providerResponseHeaders
