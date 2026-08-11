@@ -96258,7 +96258,7 @@
       },
       "PricingPatch": {
         "type": "object",
-        "description": "Pricing fields to override. Only non-zero/non-null fields are applied. All values are cost per unit in USD.\n",
+        "description": "Pricing fields to override. All non-null fields are applied. Usage-based values are costs per unit in USD. cost_per_request is a flat fee in USD applied once per billed request.\n",
         "properties": {
           "input_cost_per_token": {
             "type": "number",
@@ -96494,6 +96494,26 @@
             "minimum": 0
           },
           "output_cost_per_image_above_4096_and_4096_pixels": {
+            "type": "number",
+            "minimum": 0
+          },
+          "output_cost_per_image_above_4_megapixels": {
+            "type": "number",
+            "minimum": 0
+          },
+          "output_cost_per_image_above_8_megapixels": {
+            "type": "number",
+            "minimum": 0
+          },
+          "output_cost_per_image_above_16_megapixels": {
+            "type": "number",
+            "minimum": 0
+          },
+          "output_cost_per_image_above_32_megapixels": {
+            "type": "number",
+            "minimum": 0
+          },
+          "output_cost_per_image_above_64_megapixels": {
             "type": "number",
             "minimum": 0
           },
