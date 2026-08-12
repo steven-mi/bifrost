@@ -13,6 +13,7 @@ import NewrelicView from "./plugins/newRelicView";
 import OtelView from "./plugins/otelView";
 import PrometheusView from "./plugins/prometheusView";
 import PubSubView from "./plugins/pubsubView";
+import SplunkView from "./plugins/splunkView";
 
 type SupportedPlatform = {
 	id: string;
@@ -68,6 +69,19 @@ const supportedPlatformsList = (resolvedTheme: string): SupportedPlatform[] => [
 		id: "pubsub",
 		name: "Pub/Sub",
 		icon: <img alt="Pub/Sub" src="/images/pubsub-logo.svg" width={21} height={21} className="-ml-0.5" />,
+	},
+	{
+		id: "splunk",
+		name: "Splunk",
+		icon: (
+			<img
+				alt="Splunk"
+				src={`/images/splunk-${resolvedTheme === "dark" ? "white" : "black"}.png`}
+				width={21}
+				height={21}
+				className="-ml-0.5"
+			/>
+		),
 	},
 	{
 		id: "newrelic",
@@ -188,6 +202,7 @@ export default function ObservabilityView() {
 				{selectedPluginId === "datadog" && <DatadogView />}
 				{selectedPluginId === "bigquery" && <BigQueryView />}
 				{selectedPluginId === "pubsub" && <PubSubView />}
+				{selectedPluginId === "splunk" && <SplunkView />}
 				{selectedPluginId === "newrelic" && <NewrelicView />}
 			</div>
 		</div>
