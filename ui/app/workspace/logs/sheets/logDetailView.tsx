@@ -37,7 +37,7 @@ import {
 	RoutingEngineUsedLabels,
 	Status,
 } from "@/lib/constants/logs";
-import { ContentBlock, LogEntry, ResponsesMessage } from "@/lib/types/logs";
+import { BatchRequestCounts, ContentBlock, LogEntry, ResponsesMessage } from "@/lib/types/logs";
 import { useGetUserAgentMappingsQuery } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { downloadAsJson } from "@/lib/utils/browser-download";
@@ -364,6 +364,25 @@ const formatToolChoice = (value: unknown): string => {
 	}
 };
 
+// batchRequestStates lists the provider's per-state request tallies as discrete
+// label/count pairs. Total, Completed, and Failed are universal (every provider
+// sets them, and a 0 is a real, useful count — e.g. "no failures yet"), so they
+// always render. The remaining states are Anthropic-specific and simply absent
+// for other providers, so those are dropped when not reported.
+const batchRequestStates = (counts: BatchRequestCounts): [string, number][] => {
+	const optional: [string, number | undefined][] = [
+		["Succeeded", counts.succeeded],
+		["Expired", counts.expired],
+		["Canceled", counts.canceled],
+		["Pending", counts.pending],
+	];
+	return [
+		["Completed", counts.completed],
+		["Failed", counts.failed],
+		...optional.filter((entry): entry is [string, number] => Boolean(entry[1])),
+	];
+};
+
 // Helper to detect passthrough operations
 const isPassthroughOperation = (object: string) => object === "passthrough" || object === "passthrough_stream";
 
@@ -395,6 +414,16 @@ const statusDotStyles: Record<string, string> = {
 	processing: "bg-blue-500",
 	cancelled: "bg-gray-400",
 };
+
+const batchStatusBadgeStyles: Record<string, string> = {
+	completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+	ended: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+	failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+	expired: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
+	cancelled: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
+	deleted: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
+};
+const batchStatusBadgeDefault = "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
 
 function StatusPill({ status }: { status: Status }) {
 	return (
@@ -658,6 +687,7 @@ export function LogDetailView({
 	const showTabs = !isContainer;
 	const isPassthrough = isPassthroughOperation(log.object);
 	const isRealtimeTurn = log.object === "realtime.turn";
+	const batchDebug = log.batch_debug;
 	const passthroughParams = isPassthrough
 		? (log.params as {
 				method?: string;
@@ -848,6 +878,17 @@ export function LogDetailView({
 									className="rounded-sm border-amber-300 bg-amber-50 px-2 py-0.5 font-medium text-amber-700 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-300"
 								>
 									{log.metadata.realtime_voice}
+								</Badge>
+							)}
+							{batchDebug?.status && (
+								<Badge
+									variant="outline"
+									className={cn(
+										"rounded-sm px-2 py-0.5 font-medium uppercase",
+										batchStatusBadgeStyles[batchDebug.status] ?? batchStatusBadgeDefault,
+									)}
+								>
+									{batchDebug.status.replace(/_/g, " ")}
 								</Badge>
 							)}
 						</div>
@@ -1548,6 +1589,40 @@ export function LogDetailView({
 									</>
 								);
 							})()}
+							{batchDebug && (
+								<>
+									<DottedSeparator />
+									<div className="space-y-4">
+										<BlockHeader title="Batch Details" />
+										<div className="grid w-full grid-cols-3 items-start justify-between gap-4">
+											{batchDebug.batch_id && (
+												<LogEntryDetailsView
+													className="w-full"
+													label="Batch ID"
+													value={
+														<span className="flex items-center gap-1">
+															<code className="font-mono text-xs">{batchDebug.batch_id}</code>
+															<CopyInlineButton text={batchDebug.batch_id} testId="logdetails-copy-batch-id-button" />
+														</span>
+													}
+												/>
+											)}
+											{batchDebug.request_counts && (
+												<>
+													<LogEntryDetailsView className="w-full" label="Total Requests" value={String(batchDebug.request_counts.total)} />
+													{batchRequestStates(batchDebug.request_counts).map(([label, count]) => (
+														<LogEntryDetailsView key={label} className="w-full" label={label} value={String(count)} />
+													))}
+												</>
+											)}
+											{batchDebug.accounting?.cost != null && (
+												<LogEntryDetailsView className="w-full" label="Batch Cost" value={formatCost(batchDebug.accounting.cost)} />
+											)}
+										</div>
+									</div>
+								</>
+							)}
+
 							{log.cache_debug && (
 								<>
 									<DottedSeparator />
