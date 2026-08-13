@@ -8051,6 +8051,9 @@ func flushPluginLogs(ctx *schemas.BifrostContext) {
 // drainAndAttachPluginLogs drains accumulated plugin logs from the BifrostContext
 // and attaches them to the trace for later retrieval by observability plugins.
 func drainAndAttachPluginLogs(ctx *schemas.BifrostContext) {
+	if !ctx.HasPluginLogs() {
+		return
+	}
 	tracer, traceID, err := GetTracerFromContext(ctx)
 	if err != nil || tracer == nil || traceID == "" {
 		return
