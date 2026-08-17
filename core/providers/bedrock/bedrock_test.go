@@ -3667,7 +3667,7 @@ func TestAnthropicOutputConfigFormatStillFallsBackToBudgetTokensForReasoning(t *
 // Anthropic Bedrock structured output uses native output_config.format and does
 // not synthesize a forced tool choice, while keeping reasoning (thinking) active.
 func TestAnthropicStructuredOutputUsesOutputConfigWithoutForcedToolChoice(t *testing.T) {
-	responseFormat := any(map[string]any{
+	responseFormat := schemas.NewChatResponseFormatFromMap(map[string]any{
 		"type": "json_schema",
 		"json_schema": map[string]any{
 			"name": "classification",
@@ -3694,7 +3694,7 @@ func TestAnthropicStructuredOutputUsesOutputConfigWithoutForcedToolChoice(t *tes
 			},
 		},
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &responseFormat,
+			ResponseFormat: responseFormat,
 			Reasoning: &schemas.ChatReasoning{
 				MaxTokens: schemas.Ptr(2048),
 			},
@@ -3728,22 +3728,24 @@ func TestAnthropicStructuredOutputUsesOutputConfigWithoutForcedToolChoice(t *tes
 }
 
 func TestAnthropicStructuredOutputAcceptsOrderedMaps(t *testing.T) {
-	responseFormat := any(schemas.NewOrderedMapFromPairs(
-		schemas.KV("type", "json_schema"),
-		schemas.KV("json_schema", schemas.NewOrderedMapFromPairs(
-			schemas.KV("name", "classification"),
-			schemas.KV("schema", schemas.NewOrderedMapFromPairs(
-				schemas.KV("type", "object"),
-				schemas.KV("description", "Return structured classification"),
-				schemas.KV("properties", schemas.NewOrderedMapFromPairs(
-					schemas.KV("topic", schemas.NewOrderedMapFromPairs(
-						schemas.KV("type", "string"),
+	responseFormat := &schemas.ChatResponseFormat{
+		Type: "json_schema",
+		JSONSchema: &schemas.ResponsesTextConfigFormatJSONSchema{
+			Name: schemas.Ptr("classification"),
+			Schema: &schemas.JSONSchemaOrBool{
+				SchemaMap: schemas.NewOrderedMapFromPairs(
+					schemas.KV("type", "object"),
+					schemas.KV("description", "Return structured classification"),
+					schemas.KV("properties", schemas.NewOrderedMapFromPairs(
+						schemas.KV("topic", schemas.NewOrderedMapFromPairs(
+							schemas.KV("type", "string"),
+						)),
 					)),
-				)),
-				schemas.KV("required", []any{"topic"}),
-			)),
-		)),
-	))
+					schemas.KV("required", []any{"topic"}),
+				),
+			},
+		},
+	}
 
 	bifrostReq := &schemas.BifrostChatRequest{
 		Model: "anthropic.claude-3-7-sonnet-v1",
@@ -3756,7 +3758,7 @@ func TestAnthropicStructuredOutputAcceptsOrderedMaps(t *testing.T) {
 			},
 		},
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &responseFormat,
+			ResponseFormat: responseFormat,
 			Reasoning: &schemas.ChatReasoning{
 				MaxTokens: schemas.Ptr(2048),
 			},
@@ -3827,7 +3829,7 @@ func betaListContains(t *testing.T, fields *schemas.OrderedMap, header string) b
 // synthetic-tool path is a regular Converse tool call that all variants
 // accept reliably.
 func TestBedrockAnthropicChatStructuredOutputUsesSyntheticTool(t *testing.T) {
-	responseFormat := any(map[string]any{
+	responseFormat := schemas.NewChatResponseFormatFromMap(map[string]any{
 		"type": "json_schema",
 		"json_schema": map[string]any{
 			"name": "classification",
@@ -3854,7 +3856,7 @@ func TestBedrockAnthropicChatStructuredOutputUsesSyntheticTool(t *testing.T) {
 			},
 		},
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &responseFormat,
+			ResponseFormat: responseFormat,
 		},
 	}
 
@@ -3944,22 +3946,24 @@ func TestToBedrockResponsesRequest_AnthropicStructuredOutputUsesSyntheticTool(t 
 // TestNonAnthropicStructuredOutputStillUsesToolConversion ensures Bedrock models
 // other than Anthropic continue to use the legacy response_format->tool path.
 func TestNonAnthropicStructuredOutputStillUsesToolConversion(t *testing.T) {
-	responseFormat := any(schemas.NewOrderedMapFromPairs(
-		schemas.KV("type", "json_schema"),
-		schemas.KV("json_schema", schemas.NewOrderedMapFromPairs(
-			schemas.KV("name", "classification"),
-			schemas.KV("schema", schemas.NewOrderedMapFromPairs(
-				schemas.KV("type", "object"),
-				schemas.KV("description", "Return structured classification"),
-				schemas.KV("properties", schemas.NewOrderedMapFromPairs(
-					schemas.KV("topic", schemas.NewOrderedMapFromPairs(
-						schemas.KV("type", "string"),
+	responseFormat := &schemas.ChatResponseFormat{
+		Type: "json_schema",
+		JSONSchema: &schemas.ResponsesTextConfigFormatJSONSchema{
+			Name: schemas.Ptr("classification"),
+			Schema: &schemas.JSONSchemaOrBool{
+				SchemaMap: schemas.NewOrderedMapFromPairs(
+					schemas.KV("type", "object"),
+					schemas.KV("description", "Return structured classification"),
+					schemas.KV("properties", schemas.NewOrderedMapFromPairs(
+						schemas.KV("topic", schemas.NewOrderedMapFromPairs(
+							schemas.KV("type", "string"),
+						)),
 					)),
-				)),
-				schemas.KV("required", []any{"topic"}),
-			)),
-		)),
-	))
+					schemas.KV("required", []any{"topic"}),
+				),
+			},
+		},
+	}
 
 	bifrostReq := &schemas.BifrostChatRequest{
 		Model: "amazon.nova-pro-v1",
@@ -3972,7 +3976,7 @@ func TestNonAnthropicStructuredOutputStillUsesToolConversion(t *testing.T) {
 			},
 		},
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &responseFormat,
+			ResponseFormat: responseFormat,
 		},
 	}
 
@@ -4006,7 +4010,7 @@ func TestNonAnthropicStructuredOutputStillUsesToolConversion(t *testing.T) {
 // additionalModelRequestFieldPaths are merged into existing AdditionalModelRequestFields
 // and output_config is deep-merged instead of overwritten.
 func TestAnthropicStructuredOutputMergesAdditionalModelRequestFieldPaths(t *testing.T) {
-	responseFormat := any(map[string]any{
+	responseFormat := schemas.NewChatResponseFormatFromMap(map[string]any{
 		"type": "json_schema",
 		"json_schema": map[string]any{
 			"name": "classification",
@@ -4033,7 +4037,7 @@ func TestAnthropicStructuredOutputMergesAdditionalModelRequestFieldPaths(t *test
 			},
 		},
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &responseFormat,
+			ResponseFormat: responseFormat,
 			Reasoning: &schemas.ChatReasoning{
 				MaxTokens: schemas.Ptr(2048),
 			},
@@ -5627,7 +5631,7 @@ func TestToolResultImageContentResponsesAPI(t *testing.T) {
 // and the langchain-aws ChatBedrockConverse implementation
 // (`supports_tool_choice_values`) for prior art that ships the same gate.
 func TestBedrockLlamaChatStructuredOutputOmitsForcedToolChoice(t *testing.T) {
-	responseFormat := any(map[string]any{
+	responseFormat := schemas.NewChatResponseFormatFromMap(map[string]any{
 		"type": "json_schema",
 		"json_schema": map[string]any{
 			"name": "PlannerOutput",
@@ -5652,7 +5656,7 @@ func TestBedrockLlamaChatStructuredOutputOmitsForcedToolChoice(t *testing.T) {
 			},
 		},
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &responseFormat,
+			ResponseFormat: responseFormat,
 		},
 	}
 
@@ -5682,7 +5686,7 @@ func TestBedrockLlamaChatStructuredOutputOmitsForcedToolChoice(t *testing.T) {
 // pinning the synthetic bf_so_* tool — that's the contract that makes
 // structured output reliable on those families.
 func TestBedrockNonLlamaChatStructuredOutputForcesToolChoice(t *testing.T) {
-	responseFormat := any(map[string]any{
+	responseFormat := schemas.NewChatResponseFormatFromMap(map[string]any{
 		"type": "json_schema",
 		"json_schema": map[string]any{
 			"name": "PlannerOutput",
@@ -5707,7 +5711,7 @@ func TestBedrockNonLlamaChatStructuredOutputForcesToolChoice(t *testing.T) {
 			},
 		},
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &responseFormat,
+			ResponseFormat: responseFormat,
 		},
 	}
 

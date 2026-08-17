@@ -10,7 +10,7 @@ import (
 )
 
 func TestToHuggingFaceChatCompletionRequest_ResponseFormat(t *testing.T) {
-	makeReq := func(rf *interface{}) *schemas.BifrostChatRequest {
+	makeReq := func(rf *schemas.ChatResponseFormat) *schemas.BifrostChatRequest {
 		return &schemas.BifrostChatRequest{
 			Model: "test-model",
 			Input: []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("hello")}}},
@@ -22,7 +22,7 @@ func TestToHuggingFaceChatCompletionRequest_ResponseFormat(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		responseFormat *interface{}
+		responseFormat *schemas.ChatResponseFormat
 		wantErr        bool
 		validate       func(t *testing.T, result *HuggingFaceChatRequest)
 	}{
@@ -34,11 +34,8 @@ func TestToHuggingFaceChatCompletionRequest_ResponseFormat(t *testing.T) {
 			},
 		},
 		{
-			name: "map_type_only",
-			responseFormat: func() *interface{} {
-				var rf interface{} = map[string]interface{}{"type": "json_object"}
-				return &rf
-			}(),
+			name:           "type_only",
+			responseFormat: schemas.NewChatResponseFormatFromMap(map[string]interface{}{"type": "json_object"}),
 			validate: func(t *testing.T, result *HuggingFaceChatRequest) {
 				require.NotNil(t, result.ResponseFormat)
 				assert.Equal(t, "json_object", result.ResponseFormat.Type)
@@ -46,24 +43,21 @@ func TestToHuggingFaceChatCompletionRequest_ResponseFormat(t *testing.T) {
 			},
 		},
 		{
-			name: "map_with_json_schema",
-			responseFormat: func() *interface{} {
-				var rf interface{} = map[string]interface{}{
-					"type": "json_schema",
-					"json_schema": map[string]interface{}{
-						"name":        "my_schema",
-						"description": "A test schema",
-						"strict":      true,
-						"schema": map[string]interface{}{
-							"type": "object",
-							"properties": map[string]interface{}{
-								"answer": map[string]interface{}{"type": "string"},
-							},
+			name: "json_schema",
+			responseFormat: schemas.NewChatResponseFormatFromMap(map[string]interface{}{
+				"type": "json_schema",
+				"json_schema": map[string]interface{}{
+					"name":        "my_schema",
+					"description": "A test schema",
+					"strict":      true,
+					"schema": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"answer": map[string]interface{}{"type": "string"},
 						},
 					},
-				}
-				return &rf
-			}(),
+				},
+			}),
 			validate: func(t *testing.T, result *HuggingFaceChatRequest) {
 				require.NotNil(t, result.ResponseFormat)
 				assert.Equal(t, "json_schema", result.ResponseFormat.Type)
@@ -81,37 +75,6 @@ func TestToHuggingFaceChatCompletionRequest_ResponseFormat(t *testing.T) {
 				props, ok := schemaMap["properties"].(map[string]interface{})
 				require.True(t, ok)
 				assert.Contains(t, props, "answer")
-			},
-		},
-		{
-			name: "struct_fallback_via_convert",
-			responseFormat: func() *interface{} {
-				var rf interface{} = HuggingFaceResponseFormat{
-					Type: "json_schema",
-					JSONSchema: &HuggingFaceJSONSchema{
-						Name:   "fallback_schema",
-						Strict: schemas.Ptr(true),
-					},
-				}
-				return &rf
-			}(),
-			validate: func(t *testing.T, result *HuggingFaceChatRequest) {
-				require.NotNil(t, result.ResponseFormat, "ResponseFormat should not be nil — ConvertViaJSON fallback must handle struct values")
-				assert.Equal(t, "json_schema", result.ResponseFormat.Type)
-				require.NotNil(t, result.ResponseFormat.JSONSchema)
-				assert.Equal(t, "fallback_schema", result.ResponseFormat.JSONSchema.Name)
-				require.NotNil(t, result.ResponseFormat.JSONSchema.Strict)
-				assert.True(t, *result.ResponseFormat.JSONSchema.Strict)
-			},
-		},
-		{
-			name: "inconvertible_value_graceful_nil",
-			responseFormat: func() *interface{} {
-				var rf interface{} = 42
-				return &rf
-			}(),
-			validate: func(t *testing.T, result *HuggingFaceChatRequest) {
-				assert.Nil(t, result.ResponseFormat, "inconvertible value should gracefully result in nil ResponseFormat")
 			},
 		},
 	}

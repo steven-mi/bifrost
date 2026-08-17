@@ -1254,22 +1254,16 @@ func convertParamsToGenerationConfig(params *schemas.ChatParameters, responseMod
 	}
 	// Handle response_format to response_schema conversion
 	if params.ResponseFormat != nil {
-		formatMap, ok := (*params.ResponseFormat).(map[string]interface{})
-		if ok {
-			formatType, typeOk := formatMap["type"].(string)
-			if typeOk {
-				switch formatType {
-				case "json_schema":
-					// OpenAI Structured Outputs: {"type": "json_schema", "json_schema": {...}}
-					if schemaMap := extractSchemaMapFromResponseFormat(params.ResponseFormat); schemaMap != nil {
-						config.ResponseMIMEType = "application/json"
-						config.ResponseJSONSchema = schemaMap
-					}
-				case "json_object":
-					// Maps to Gemini's responseMimeType without schema
-					config.ResponseMIMEType = "application/json"
-				}
+		switch params.ResponseFormat.Type {
+		case "json_schema":
+			// OpenAI Structured Outputs: {"type": "json_schema", "json_schema": {"schema": {...}}}
+			if schema, ok := params.ResponseFormat.SchemaOrderedMap(); ok {
+				config.ResponseMIMEType = "application/json"
+				config.ResponseJSONSchema = normalizeSchemaValueForGemini(schema)
 			}
+		case "json_object":
+			// Maps to Gemini's responseMimeType without schema
+			config.ResponseMIMEType = "application/json"
 		}
 	}
 	if params.ExtraParams != nil {
@@ -2831,38 +2825,6 @@ func normalizeOrderedSchemaForGemini(om *schemas.OrderedMap) *schemas.OrderedMap
 		out.Set(key, normalized[key])
 	}
 	return out
-}
-
-// extractSchemaMapFromResponseFormat extracts the JSON schema from OpenAI's response_format
-// structure. The schema may be a plain map or an order-preserving OrderedMap (e.g. when built
-// from a Responses request); the result is used with ResponseJSONSchema.
-func extractSchemaMapFromResponseFormat(responseFormat *interface{}) interface{} {
-	formatMap, ok := (*responseFormat).(map[string]interface{})
-	if !ok {
-		return nil
-	}
-
-	formatType, ok := formatMap["type"].(string)
-	if !ok || formatType != "json_schema" {
-		return nil
-	}
-
-	jsonSchemaObj, ok := formatMap["json_schema"].(map[string]interface{})
-	if !ok {
-		return nil
-	}
-
-	schemaObj, ok := jsonSchemaObj["schema"]
-	if !ok {
-		return nil
-	}
-
-	switch schemaObj.(type) {
-	case map[string]interface{}, *schemas.OrderedMap, schemas.OrderedMap:
-		// Normalize the schema for Gemini compatibility
-		return normalizeSchemaValueForGemini(schemaObj)
-	}
-	return nil
 }
 
 // extractFunctionResponseOutput extracts the output text from a FunctionResponse.

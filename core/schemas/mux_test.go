@@ -1007,7 +1007,7 @@ func TestToBifrostResponsesStreamResponse_MapsLengthToIncompleteEvent(t *testing
 // response_format ↔ text.format conversion tests
 // ---------------------------------------------------------------------------
 
-func makeJSONSchemaResponseFormat(name, description string, strict bool, schema interface{}) interface{} {
+func makeJSONSchemaResponseFormat(name, description string, strict bool, schema interface{}) *ChatResponseFormat {
 	jsObj := map[string]interface{}{
 		"name":   name,
 		"strict": strict,
@@ -1016,10 +1016,10 @@ func makeJSONSchemaResponseFormat(name, description string, strict bool, schema 
 	if description != "" {
 		jsObj["description"] = description
 	}
-	return map[string]interface{}{
+	return NewChatResponseFormatFromMap(map[string]interface{}{
 		"type":        "json_schema",
 		"json_schema": jsObj,
-	}
+	})
 }
 
 func TestToResponsesRequest_ResponseFormat_JSONSchema(t *testing.T) {
@@ -1030,7 +1030,7 @@ func TestToResponsesRequest_ResponseFormat_JSONSchema(t *testing.T) {
 	}
 	rf := makeJSONSchemaResponseFormat("CityInfo", "City schema", true, schema)
 	chatReq := &BifrostChatRequest{
-		Params: &ChatParameters{ResponseFormat: &rf},
+		Params: &ChatParameters{ResponseFormat: rf},
 	}
 
 	rr := chatReq.ToResponsesRequest()
@@ -1066,9 +1066,9 @@ func TestToResponsesRequest_ResponseFormat_JSONSchema(t *testing.T) {
 }
 
 func TestToResponsesRequest_ResponseFormat_JSONObject(t *testing.T) {
-	rf := interface{}(map[string]interface{}{"type": "json_object"})
+	rf := NewChatResponseFormatFromMap(map[string]interface{}{"type": "json_object"})
 	chatReq := &BifrostChatRequest{
-		Params: &ChatParameters{ResponseFormat: &rf},
+		Params: &ChatParameters{ResponseFormat: rf},
 	}
 
 	rr := chatReq.ToResponsesRequest()
@@ -1081,9 +1081,9 @@ func TestToResponsesRequest_ResponseFormat_JSONObject(t *testing.T) {
 }
 
 func TestToResponsesRequest_ResponseFormat_Text(t *testing.T) {
-	rf := interface{}(map[string]interface{}{"type": "text"})
+	rf := NewChatResponseFormatFromMap(map[string]interface{}{"type": "text"})
 	chatReq := &BifrostChatRequest{
-		Params: &ChatParameters{ResponseFormat: &rf},
+		Params: &ChatParameters{ResponseFormat: rf},
 	}
 
 	rr := chatReq.ToResponsesRequest()
@@ -1130,30 +1130,27 @@ func TestToChatRequest_TextFormat_JSONSchema(t *testing.T) {
 	if cr.Params == nil || cr.Params.ResponseFormat == nil {
 		t.Fatal("expected ResponseFormat to be set")
 	}
-	rfMap, ok := (*cr.Params.ResponseFormat).(map[string]interface{})
-	if !ok {
-		t.Fatal("expected ResponseFormat to be map[string]interface{}")
+	rf := cr.Params.ResponseFormat
+	if rf.Type != "json_schema" {
+		t.Fatalf("expected type json_schema, got %v", rf.Type)
 	}
-	if rfMap["type"] != "json_schema" {
-		t.Fatalf("expected type json_schema, got %v", rfMap["type"])
-	}
-	jsObj, ok := rfMap["json_schema"].(map[string]interface{})
-	if !ok {
+	if rf.JSONSchema == nil {
 		t.Fatal("expected json_schema inner object")
 	}
-	if jsObj["name"] != "CityInfo" {
-		t.Fatalf("expected name=CityInfo, got %v", jsObj["name"])
+	if rf.JSONSchema.Name == nil || *rf.JSONSchema.Name != "CityInfo" {
+		t.Fatalf("expected name=CityInfo, got %v", rf.JSONSchema.Name)
 	}
-	if jsObj["description"] != "City schema" {
-		t.Fatalf("expected description='City schema', got %v", jsObj["description"])
+	if rf.JSONSchema.Description == nil || *rf.JSONSchema.Description != "City schema" {
+		t.Fatalf("expected description='City schema', got %v", rf.JSONSchema.Description)
 	}
-	if jsObj["strict"] != true {
-		t.Fatalf("expected strict=true, got %v", jsObj["strict"])
+	if rf.JSONSchema.Strict == nil || !*rf.JSONSchema.Strict {
+		t.Fatalf("expected strict=true, got %v", rf.JSONSchema.Strict)
 	}
-	if jsObj["schema"] == nil {
+	schema, ok := rf.SchemaOrderedMap()
+	if !ok {
 		t.Fatal("expected schema to be set")
 	}
-	schemaBytes, err := MarshalSorted(jsObj["schema"])
+	schemaBytes, err := MarshalSorted(schema)
 	if err != nil {
 		t.Fatalf("failed to marshal schema: %v", err)
 	}
@@ -1175,15 +1172,12 @@ func TestToChatRequest_TextFormat_JSONObject(t *testing.T) {
 	if cr.Params == nil || cr.Params.ResponseFormat == nil {
 		t.Fatal("expected ResponseFormat to be set")
 	}
-	rfMap, ok := (*cr.Params.ResponseFormat).(map[string]interface{})
-	if !ok {
-		t.Fatal("expected ResponseFormat to be map[string]interface{}")
+	rf := cr.Params.ResponseFormat
+	if rf.Type != "json_object" {
+		t.Fatalf("expected type json_object, got %v", rf.Type)
 	}
-	if rfMap["type"] != "json_object" {
-		t.Fatalf("expected type json_object, got %v", rfMap["type"])
-	}
-	if _, hasJS := rfMap["json_schema"]; hasJS {
-		t.Fatal("json_schema key should not be present for json_object type")
+	if rf.JSONSchema != nil {
+		t.Fatal("json_schema should not be present for json_object type")
 	}
 }
 
@@ -1204,7 +1198,7 @@ func TestResponseFormatRoundTrip_ChatToResponsesAndBack(t *testing.T) {
 	}
 	rf := makeJSONSchemaResponseFormat("CityInfo", "City schema", true, schema)
 	chatReq := &BifrostChatRequest{
-		Params: &ChatParameters{ResponseFormat: &rf},
+		Params: &ChatParameters{ResponseFormat: rf},
 	}
 
 	// Chat → Responses → Chat
@@ -1214,25 +1208,21 @@ func TestResponseFormatRoundTrip_ChatToResponsesAndBack(t *testing.T) {
 	if cr.Params == nil || cr.Params.ResponseFormat == nil {
 		t.Fatal("expected ResponseFormat to survive round-trip")
 	}
-	rfMap, ok := (*cr.Params.ResponseFormat).(map[string]interface{})
-	if !ok {
-		t.Fatal("expected ResponseFormat to be map after round-trip")
+	got := cr.Params.ResponseFormat
+	if got.Type != "json_schema" {
+		t.Fatalf("type did not survive round-trip: got %v", got.Type)
 	}
-	if rfMap["type"] != "json_schema" {
-		t.Fatalf("type did not survive round-trip: got %v", rfMap["type"])
-	}
-	jsObj, ok := rfMap["json_schema"].(map[string]interface{})
-	if !ok {
+	if got.JSONSchema == nil {
 		t.Fatal("json_schema inner object missing after round-trip")
 	}
-	if jsObj["name"] != "CityInfo" {
-		t.Fatalf("name did not survive round-trip: got %v", jsObj["name"])
+	if got.JSONSchema.Name == nil || *got.JSONSchema.Name != "CityInfo" {
+		t.Fatalf("name did not survive round-trip: got %v", got.JSONSchema.Name)
 	}
-	if jsObj["description"] != "City schema" {
-		t.Fatalf("description did not survive round-trip: got %v", jsObj["description"])
+	if got.JSONSchema.Description == nil || *got.JSONSchema.Description != "City schema" {
+		t.Fatalf("description did not survive round-trip: got %v", got.JSONSchema.Description)
 	}
-	if jsObj["strict"] != true {
-		t.Fatalf("strict did not survive round-trip: got %v", jsObj["strict"])
+	if got.JSONSchema.Strict == nil || !*got.JSONSchema.Strict {
+		t.Fatalf("strict did not survive round-trip: got %v", got.JSONSchema.Strict)
 	}
 }
 
@@ -1250,7 +1240,7 @@ func TestToResponsesRequest_JSONSchema_NoDoubleNesting(t *testing.T) {
 	}
 	rf := makeJSONSchemaResponseFormat("CityInfo", "", true, schema)
 	chatReq := &BifrostChatRequest{
-		Params: &ChatParameters{ResponseFormat: &rf},
+		Params: &ChatParameters{ResponseFormat: rf},
 	}
 
 	rr := chatReq.ToResponsesRequest()
@@ -1325,30 +1315,21 @@ func TestToChatRequest_TextFormat_TypedFields(t *testing.T) {
 		t.Fatal("expected ResponseFormat to be set")
 	}
 
-	rfMap, ok := (*cr.Params.ResponseFormat).(map[string]interface{})
-	if !ok {
-		t.Fatal("expected ResponseFormat to be a map")
-	}
-
-	jsObj, ok := rfMap["json_schema"].(map[string]interface{})
-	if !ok {
+	got := cr.Params.ResponseFormat
+	if got.JSONSchema == nil {
 		t.Fatal("expected json_schema inner object")
 	}
 
 	// Schema body must be present and non-empty
-	schemaVal, ok := jsObj["schema"]
+	schema, ok := got.SchemaOrderedMap()
 	if !ok {
-		t.Fatalf("schema body silently dropped: json_schema=%v", jsObj)
+		t.Fatal("schema body silently dropped")
 	}
-
-	schemaMap, ok := schemaVal.(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected schema to be a map, got %T", schemaVal)
+	if typeVal, _ := schema.Get("type"); typeVal != "object" {
+		t.Fatalf("expected schema.type=object, got %v", typeVal)
 	}
-	if schemaMap["type"] != "object" {
-		t.Fatalf("expected schema.type=object, got %v", schemaMap["type"])
-	}
-	propsBytes, err := MarshalSorted(schemaMap["properties"])
+	propsVal, _ := schema.Get("properties")
+	propsBytes, err := MarshalSorted(propsVal)
 	if err != nil {
 		t.Fatalf("failed to marshal properties: %v", err)
 	}

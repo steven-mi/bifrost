@@ -1402,7 +1402,7 @@ func TestStructuredOutputConversion(t *testing.T) {
 					},
 				},
 				Params: &schemas.ChatParameters{
-					ResponseFormat: schemas.Ptr[interface{}](map[string]interface{}{
+					ResponseFormat: schemas.NewChatResponseFormatFromMap(map[string]interface{}{
 						"type": "json_schema",
 						"json_schema": map[string]interface{}{
 							"name": "UserInfo",
@@ -1433,8 +1433,8 @@ func TestStructuredOutputConversion(t *testing.T) {
 				assert.NotNil(t, result.GenerationConfig.ResponseJSONSchema, "responseJsonSchema should be set")
 
 				// Validate the schema structure
-				schemaMap, ok := result.GenerationConfig.ResponseJSONSchema.(map[string]interface{})
-				require.True(t, ok, "ResponseJSONSchema should be a map")
+				schemaMap, ok := asPlainMap(t, result.GenerationConfig.ResponseJSONSchema)
+				require.True(t, ok, "ResponseJSONSchema should be a schema object")
 
 				// Check properties
 				properties, ok := schemaMap["properties"].(map[string]interface{})
@@ -1482,7 +1482,7 @@ func TestStructuredOutputConversion(t *testing.T) {
 					},
 				},
 				Params: &schemas.ChatParameters{
-					ResponseFormat: schemas.Ptr[interface{}](map[string]interface{}{
+					ResponseFormat: schemas.NewChatResponseFormatFromMap(map[string]interface{}{
 						"type": "json_schema",
 						"json_schema": map[string]interface{}{
 							"name": "NullableData",
@@ -1528,7 +1528,7 @@ func TestStructuredOutputConversion(t *testing.T) {
 					},
 				},
 				Params: &schemas.ChatParameters{
-					ResponseFormat: schemas.Ptr[interface{}](map[string]interface{}{
+					ResponseFormat: schemas.NewChatResponseFormatFromMap(map[string]interface{}{
 						"type": "json_schema",
 						"json_schema": map[string]interface{}{
 							"name": "ComplexData",
@@ -1561,7 +1561,8 @@ func TestStructuredOutputConversion(t *testing.T) {
 				assert.Equal(t, "application/json", result.GenerationConfig.ResponseMIMEType)
 				assert.NotNil(t, result.GenerationConfig.ResponseJSONSchema)
 
-				schemaMap := result.GenerationConfig.ResponseJSONSchema.(map[string]interface{})
+				schemaMap, ok := asPlainMap(t, result.GenerationConfig.ResponseJSONSchema)
+				require.True(t, ok, "ResponseJSONSchema should be a schema object")
 				properties := schemaMap["properties"].(map[string]interface{})
 				items := properties["items"].(map[string]interface{})
 
@@ -1589,7 +1590,7 @@ func TestStructuredOutputConversion(t *testing.T) {
 					},
 				},
 				Params: &schemas.ChatParameters{
-					ResponseFormat: schemas.Ptr[interface{}](map[string]interface{}{
+					ResponseFormat: schemas.NewChatResponseFormatFromMap(map[string]interface{}{
 						"type": "json_object",
 					}),
 				},
@@ -1638,13 +1639,13 @@ func TestStructuredOutputWithToolsConflict(t *testing.T) {
 			},
 		}
 	}
-	jsonObjectFormat := func() *interface{} {
-		return schemas.Ptr[interface{}](map[string]interface{}{
+	jsonObjectFormat := func() *schemas.ChatResponseFormat {
+		return schemas.NewChatResponseFormatFromMap(map[string]interface{}{
 			"type": "json_object",
 		})
 	}
-	jsonSchemaFormat := func() *interface{} {
-		return schemas.Ptr[interface{}](map[string]interface{}{
+	jsonSchemaFormat := func() *schemas.ChatResponseFormat {
+		return schemas.NewChatResponseFormatFromMap(map[string]interface{}{
 			"type": "json_schema",
 			"json_schema": map[string]interface{}{
 				"name": "Result",
@@ -1750,20 +1751,21 @@ func TestStructuredOutputWithToolsConflict(t *testing.T) {
 
 // asPlainMap normalizes schema objects that may be either plain maps or
 // order-preserving OrderedMaps (schema fields preserve client key order).
+// asPlainMap deeply converts a schema value (a plain map or an order-preserving
+// OrderedMap, possibly with nested OrderedMap values) into a deep plain map so
+// tests can navigate nested objects with plain type assertions.
 func asPlainMap(t *testing.T, v interface{}) (map[string]interface{}, bool) {
 	t.Helper()
-	switch m := v.(type) {
-	case map[string]interface{}:
-		return m, true
-	case *schemas.OrderedMap:
-		if m == nil {
-			return nil, false
-		}
-		return m.ToMap(), true
-	case schemas.OrderedMap:
-		return m.ToMap(), true
+	if v == nil {
+		return nil, false
 	}
-	return nil, false
+	b, err := sonic.Marshal(v)
+	require.NoError(t, err)
+	var m map[string]interface{}
+	if err := sonic.Unmarshal(b, &m); err != nil {
+		return nil, false
+	}
+	return m, true
 }
 
 func TestResponsesStructuredOutputConversion(t *testing.T) {

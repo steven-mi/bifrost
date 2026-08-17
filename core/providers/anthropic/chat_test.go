@@ -1296,10 +1296,10 @@ func TestToAnthropicChatRequest_NonOpus47_NoDefaultDisplay(t *testing.T) {
 // Structured output (response_format: json_schema) round-trip tests
 // ---------------------------------------------------------------------------
 
-// makeSOResponseFormat returns a response_format interface value in the
-// OpenAI wire format expected by convertChatResponseFormatToTool.
-func makeSOResponseFormat(schemaName string) interface{} {
-	return map[string]interface{}{
+// makeSOResponseFormat returns a typed response_format in the OpenAI wire format
+// expected by convertChatResponseFormatToTool.
+func makeSOResponseFormat(schemaName string) *schemas.ChatResponseFormat {
+	return schemas.NewChatResponseFormatFromMap(map[string]interface{}{
 		"type": "json_schema",
 		"json_schema": map[string]interface{}{
 			"name": schemaName,
@@ -1312,7 +1312,7 @@ func makeSOResponseFormat(schemaName string) interface{} {
 				"required": []interface{}{"color", "animal"},
 			},
 		},
-	}
+	})
 }
 
 // toolConversionProviders are the providers whose Anthropic-Messages-compatible
@@ -1335,7 +1335,7 @@ func TestToAnthropicChatRequest_StructuredOutput_ToolConversion_NoThinking(t *te
 					{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("Hello")}},
 				},
 				Params: &schemas.ChatParameters{
-					ResponseFormat: &rf,
+					ResponseFormat: rf,
 				},
 			}
 
@@ -1393,7 +1393,7 @@ func TestToAnthropicChatRequest_StructuredOutput_ToolConversion_ThinkingEffort(t
 				},
 				Params: &schemas.ChatParameters{
 					MaxCompletionTokens: new(16000),
-					ResponseFormat:      &rf,
+					ResponseFormat:      rf,
 					Reasoning:           &schemas.ChatReasoning{Effort: &effort},
 				},
 			}
@@ -1440,7 +1440,7 @@ func TestToAnthropicChatRequest_StructuredOutput_ToolConversion_ThinkingMaxToken
 				},
 				Params: &schemas.ChatParameters{
 					MaxCompletionTokens: new(16000),
-					ResponseFormat:      &rf,
+					ResponseFormat:      rf,
 					Reasoning:           &schemas.ChatReasoning{MaxTokens: &maxTok},
 				},
 			}
@@ -1473,7 +1473,7 @@ func TestToAnthropicChatRequest_StructuredOutput_NativeOutputConfig_Anthropic(t 
 			{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr("Hello")}},
 		},
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &rf,
+			ResponseFormat: rf,
 		},
 	}
 

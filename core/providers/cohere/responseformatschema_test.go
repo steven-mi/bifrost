@@ -56,21 +56,20 @@ func TestConvertCohereResponseFormatToBifrost_WrapsSchema(t *testing.T) {
 	})
 	require.NotNil(t, got)
 
-	// Consumers type-assert this to map[string]interface{} - anthropic/utils.go
-	// convertChatResponseFormatToTool silently returns nil on anything else, which meant
-	// Anthropic applied no structured output at all and answered with fenced JSON.
-	out, isMap := (*got).(map[string]interface{})
-	require.True(t, isMap, "ResponseFormat must be a map like every other inbound path, got %T", *got)
+	// The canonical form is a json_schema wrapper: {type, json_schema:{name, schema}}.
+	// Anthropic's convertChatResponseFormatToTool needs the name, and the raw schema
+	// must sit under json_schema.schema, or structured output is silently dropped.
+	assert.Equal(t, "json_schema", got.Type)
+	require.NotNil(t, got.JSONSchema)
+	require.NotNil(t, got.JSONSchema.Name)
+	assert.NotEmpty(t, *got.JSONSchema.Name, "OpenAI requires response_format.json_schema.name")
 
-	assert.Equal(t, "json_schema", out["type"])
-	wrapper, ok := out["json_schema"].(map[string]interface{})
-	require.True(t, ok, "json_schema must be a wrapper object, got %T", out["json_schema"])
-
-	assert.NotEmpty(t, wrapper["name"], "OpenAI requires response_format.json_schema.name")
-	inner, ok := wrapper["schema"].(map[string]interface{})
+	inner, ok := got.SchemaOrderedMap()
 	require.True(t, ok, "the raw schema belongs under json_schema.schema")
-	assert.Equal(t, "object", inner["type"])
-	assert.Contains(t, inner, "properties")
+	typeVal, _ := inner.Get("type")
+	assert.Equal(t, "object", typeVal)
+	_, hasProps := inner.Get("properties")
+	assert.True(t, hasProps)
 }
 
 // Plain JSON mode (no schema) must stay plain - wrapping nothing would be wrong.
@@ -80,10 +79,8 @@ func TestConvertCohereResponseFormatToBifrost_PlainJSONObjectUnchanged(t *testin
 	})
 	require.NotNil(t, got)
 
-	out, isMap := (*got).(map[string]interface{})
-	require.True(t, isMap, "ResponseFormat must be a map, got %T", *got)
-	assert.Equal(t, "json_object", out["type"])
-	assert.NotContains(t, out, "json_schema")
+	assert.Equal(t, "json_object", got.Type)
+	assert.Nil(t, got.JSONSchema)
 }
 
 func mustJSON(t *testing.T, v interface{}) string {

@@ -24,7 +24,12 @@ func ToPerplexityChatCompletionRequest(bifrostReq *schemas.BifrostChatRequest) *
 		perplexityReq.TopP = bifrostReq.Params.TopP
 		perplexityReq.PresencePenalty = bifrostReq.Params.PresencePenalty
 		perplexityReq.FrequencyPenalty = bifrostReq.Params.FrequencyPenalty
-		perplexityReq.ResponseFormat = bifrostReq.Params.ResponseFormat
+		// Perplexity's wire is OpenAI-compatible; forward the typed response_format
+		// as-is. Marshalling ChatResponseFormat preserves the schema key order.
+		if bifrostReq.Params.ResponseFormat != nil {
+			var rf interface{} = bifrostReq.Params.ResponseFormat
+			perplexityReq.ResponseFormat = &rf
+		}
 
 		// Tool calling parameters
 		perplexityReq.Tools = bifrostReq.Params.Tools

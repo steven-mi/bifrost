@@ -230,39 +230,26 @@ func extractFloat64(v interface{}) (float64, bool) {
 	}
 }
 
-// ConvertResponseFormatToCohere converts OpenAI-style response_format (interface{}) to Cohere's typed format
-// Input can be a map with structure: { type: "json_schema", json_schema: { schema: {...} } }
+// ConvertResponseFormatToCohere converts the neutral chat response_format to Cohere's typed format.
+// Input: ChatResponseFormat { type: "json_schema", json_schema: { schema: {...} } }
 // Output: CohereResponseFormat with flat structure: { type: "json_object", json_schema: {...} }
-func convertResponseFormatToCohere(responseFormat *interface{}) *CohereResponseFormat {
+func convertResponseFormatToCohere(responseFormat *schemas.ChatResponseFormat) *CohereResponseFormat {
 	if responseFormat == nil {
-		return nil
-	}
-
-	// Try to extract as map
-	formatMap, ok := (*responseFormat).(map[string]interface{})
-	if !ok {
 		return nil
 	}
 
 	cohereFormat := &CohereResponseFormat{}
 
-	// Extract type
-	typeStr, _ := formatMap["type"].(string)
-	switch typeStr {
+	switch responseFormat.Type {
 	case "text":
 		cohereFormat.Type = ResponseFormatTypeText
 	case "json_object", "json_schema":
 		cohereFormat.Type = ResponseFormatTypeJSONObject
 
-		// Extract the nested schema
-		// OpenAI format: { type: "json_schema", json_schema: { name: "X", strict: true, schema: {...} } }
-		if jsonSchemaWrapper, ok := formatMap["json_schema"].(map[string]interface{}); ok {
-			// The schema may be a plain map or an order-preserving OrderedMap
-			// (e.g. when built from a Responses request).
-			if schema, ok := schemas.SafeExtractOrderedMap(jsonSchemaWrapper["schema"]); ok {
-				var schemaInterface interface{} = schema
-				cohereFormat.JSONSchema = &schemaInterface
-			}
+		// Cohere carries the bare schema (order preserved via OrderedMap).
+		if schema, ok := responseFormat.SchemaOrderedMap(); ok {
+			var schemaInterface interface{} = schema
+			cohereFormat.JSONSchema = &schemaInterface
 		}
 	default:
 		return nil
@@ -271,32 +258,28 @@ func convertResponseFormatToCohere(responseFormat *interface{}) *CohereResponseF
 	return cohereFormat
 }
 
-// convertCohereResponseFormatToBifrost converts Cohere's typed response_format back to interface{}
-func convertCohereResponseFormatToBifrost(cohereFormat *CohereResponseFormat) *interface{} {
+// convertCohereResponseFormatToBifrost converts Cohere's typed response_format back to the neutral chat format.
+func convertCohereResponseFormatToBifrost(cohereFormat *CohereResponseFormat) *schemas.ChatResponseFormat {
 	if cohereFormat == nil {
 		return nil
 	}
 
-	// Must be a map[string]interface{}: that is what every other inbound path yields, and
-	// consumers type-assert to it. anthropic/utils.go convertChatResponseFormatToTool returns
-	// nil on anything else, so a json.RawMessage here meant Anthropic applied no structured
-	// output at all and answered with markdown-fenced JSON.
-	result := map[string]interface{}{}
+	// Cohere carries the RAW schema; the canonical form expects json_schema to be a
+	// wrapper {name, schema}. Emitting the bare schema was rejected upstream with
+	// "Missing required parameter: 'response_format.json_schema.name'". Cohere supplies
+	// no name, so synthesize one - `strict` is deliberately left unset, since arbitrary
+	// Cohere schemas need not satisfy the stricter subset.
 	if cohereFormat.JSONSchema != nil {
-		// Cohere carries the RAW schema; the canonical form expects json_schema to be a
-		// wrapper {name, schema}. Emitting the bare schema was rejected upstream with
-		// "Missing required parameter: 'response_format.json_schema.name'". Cohere supplies
-		// no name, so synthesize one - `strict` is deliberately left unset, since arbitrary
-		// Cohere schemas need not satisfy the stricter subset.
-		result["type"] = "json_schema"
-		result["json_schema"] = map[string]interface{}{
-			"name":   "response",
-			"schema": *cohereFormat.JSONSchema,
+		if schema, ok := schemas.SafeExtractOrderedMap(*cohereFormat.JSONSchema); ok {
+			return &schemas.ChatResponseFormat{
+				Type: "json_schema",
+				JSONSchema: &schemas.ResponsesTextConfigFormatJSONSchema{
+					Name:   schemas.Ptr("response"),
+					Schema: &schemas.JSONSchemaOrBool{SchemaMap: schema},
+				},
+			}
 		}
-	} else {
-		result["type"] = string(cohereFormat.Type)
 	}
 
-	var resultInterface interface{} = result
-	return &resultInterface
+	return &schemas.ChatResponseFormat{Type: string(cohereFormat.Type)}
 }

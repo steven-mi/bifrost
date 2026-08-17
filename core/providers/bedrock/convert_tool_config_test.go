@@ -619,7 +619,7 @@ func TestConvertChatParameters_PinnedServerToolE2E(t *testing.T) {
 // (no synthetic tool), so the conflict only surfaces on non-Anthropic
 // Bedrock targets.
 func TestConvertChatParameters_ResponseFormatWithPinnedServerTool_NoConflictingChoice(t *testing.T) {
-	responseFormat := any(map[string]any{
+	responseFormat := schemas.NewChatResponseFormatFromMap(map[string]any{
 		"type": "json_schema",
 		"json_schema": map[string]any{
 			"name": "classification",
@@ -636,7 +636,7 @@ func TestConvertChatParameters_ResponseFormatWithPinnedServerTool_NoConflictingC
 	bifrostReq := &schemas.BifrostChatRequest{
 		Model: "amazon.nova-pro-v1:0",
 		Params: &schemas.ChatParameters{
-			ResponseFormat: &responseFormat,
+			ResponseFormat: responseFormat,
 			Tools: []schemas.ChatTool{
 				{
 					Type: schemas.ChatToolType("bash_20250124"),

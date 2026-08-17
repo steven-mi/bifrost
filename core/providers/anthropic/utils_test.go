@@ -492,29 +492,26 @@ func TestNormalizeSchemaForAnthropic(t *testing.T) {
 func TestConvertChatResponseFormatToAnthropicOutputFormat(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    *interface{}
+		input    *schemas.ChatResponseFormat
 		expected interface{}
 	}{
 		{
 			name: "chat format with nullable enum gets normalized to anyOf",
-			input: func() *interface{} {
-				val := interface{}(map[string]interface{}{
-					"type": "json_schema",
-					"json_schema": map[string]interface{}{
-						"name": "TestSchema",
-						"schema": map[string]interface{}{
-							"type": "object",
-							"properties": map[string]interface{}{
-								"field": map[string]interface{}{
-									"type": []interface{}{"string", "null"},
-									"enum": []string{"value1", "value2"},
-								},
+			input: schemas.NewChatResponseFormatFromMap(map[string]interface{}{
+				"type": "json_schema",
+				"json_schema": map[string]interface{}{
+					"name": "TestSchema",
+					"schema": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"field": map[string]interface{}{
+								"type": []interface{}{"string", "null"},
+								"enum": []string{"value1", "value2"},
 							},
 						},
 					},
-				})
-				return &val
-			}(),
+				},
+			}),
 			expected: map[string]interface{}{
 				"type": "json_schema",
 				"schema": map[string]interface{}{
@@ -539,13 +536,8 @@ func TestConvertChatResponseFormatToAnthropicOutputFormat(t *testing.T) {
 			expected: nil,
 		},
 		{
-			name: "non-json_schema type returns nil",
-			input: func() *interface{} {
-				val := interface{}(map[string]interface{}{
-					"type": "json",
-				})
-				return &val
-			}(),
+			name:     "non-json_schema type returns nil",
+			input:    schemas.NewChatResponseFormatFromMap(map[string]interface{}{"type": "json"}),
 			expected: nil,
 		},
 	}
@@ -4145,15 +4137,15 @@ func TestConvertChatResponseFormatToTool_OrderedMapSchema(t *testing.T) {
 		schemas.KV("properties", props),
 		schemas.KV("required", []string{"type", "text"}),
 	)
-	var responseFormat interface{} = map[string]interface{}{
-		"type": "json_schema",
-		"json_schema": map[string]interface{}{
-			"name":   "reply",
-			"schema": schemaOM,
+	responseFormat := &schemas.ChatResponseFormat{
+		Type: "json_schema",
+		JSONSchema: &schemas.ResponsesTextConfigFormatJSONSchema{
+			Name:   schemas.Ptr("reply"),
+			Schema: &schemas.JSONSchemaOrBool{SchemaMap: schemaOM},
 		},
 	}
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
-	tool := convertChatResponseFormatToTool(ctx, &schemas.ChatParameters{ResponseFormat: &responseFormat})
+	tool := convertChatResponseFormatToTool(ctx, &schemas.ChatParameters{ResponseFormat: responseFormat})
 	if tool == nil {
 		t.Fatal("OrderedMap-valued schema must not be dropped")
 	}

@@ -210,7 +210,7 @@ type ChatParameters struct {
 	PromptCacheRetention *string               `json:"prompt_cache_retention,omitempty"` // Prompt cache retention ("in_memory" or "24h")
 	PromptCacheOptions   *PromptCacheOptions   `json:"prompt_cache_options,omitempty"`   // Request-wide prompt cache options (OpenAI gpt-5.6+)
 	Reasoning            *ChatReasoning        `json:"reasoning,omitempty"`              // Reasoning parameters
-	ResponseFormat       *interface{}          `json:"response_format,omitempty"`        // Format for the response
+	ResponseFormat       *ChatResponseFormat   `json:"response_format,omitempty"`        // Format for the response
 	SafetyIdentifier     *string               `json:"safety_identifier,omitempty"`      // Safety identifier
 	Seed                 *int                  `json:"seed,omitempty"`
 	ServiceTier          *BifrostServiceTier   `json:"service_tier,omitempty"`
@@ -299,6 +299,72 @@ func (cp *ChatParameters) UnmarshalJSON(data []byte) error {
 	}
 	// ExtraParams etc. are already handled by the alias
 	return nil
+}
+
+// ChatResponseFormat specifies the format the model must output for a chat
+// completion (the OpenAI `response_format` field). It mirrors the Responses API's
+// ResponsesTextConfigFormat: the JSON schema is held in an order-preserving type
+// (see JSONSchemaOrBool) so the client's schema key order survives to the
+// provider. Structured-output generation is order-sensitive — OpenAI fills fields
+// and picks union branches following the literal key order of the schema — so
+// decoding into a plain map (and re-marshaling it sorted) degrades output quality.
+type ChatResponseFormat struct {
+	Type       string                               `json:"type"`                  // "text" | "json_object" | "json_schema"
+	JSONSchema *ResponsesTextConfigFormatJSONSchema `json:"json_schema,omitempty"` // when type == "json_schema"
+}
+
+// NewChatResponseFormatFromMap builds a ChatResponseFormat from a raw
+// response_format value (a map[string]interface{} or *OrderedMap) of the shape
+// {"type": ..., "json_schema": {"name":..., "schema":...}}. It is a convenience
+// for callers holding an untyped response_format; JSON decoding populates the
+// typed fields the same way the wire path does. Returns nil if v is not an
+// object. Mirrors JSONSchemaFromMap for the Responses API.
+func NewChatResponseFormatFromMap(v interface{}) *ChatResponseFormat {
+	if v == nil {
+		return nil
+	}
+	data, err := MarshalSorted(v)
+	if err != nil {
+		return nil
+	}
+	var rf ChatResponseFormat
+	if err := Unmarshal(data, &rf); err != nil {
+		return nil
+	}
+	return &rf
+}
+
+// Clone returns a deep copy of the ChatResponseFormat, preserving the schema's
+// key order. Returns nil for a nil receiver. Used by request-copying plugins.
+func (f *ChatResponseFormat) Clone() *ChatResponseFormat {
+	if f == nil {
+		return nil
+	}
+	data, err := MarshalSorted(f)
+	if err != nil {
+		return nil
+	}
+	var out ChatResponseFormat
+	if err := Unmarshal(data, &out); err != nil {
+		return nil
+	}
+	return &out
+}
+
+// SchemaOrderedMap returns the JSON schema carried under
+// response_format.json_schema.schema as an order-preserving *OrderedMap, if one
+// is present. The second return is false for text/json_object formats, a boolean
+// schema, or when no schema is set. This is the accessor providers should use
+// when translating response_format into their native structured-output format.
+func (f *ChatResponseFormat) SchemaOrderedMap() (*OrderedMap, bool) {
+	if f == nil || f.JSONSchema == nil {
+		return nil, false
+	}
+	om, _, err := f.JSONSchema.CompositeSchema()
+	if err != nil || om == nil {
+		return nil, false
+	}
+	return om, true
 }
 
 // ChatAudioParameters represents the parameters for a chat audio completion. (Only supported by OpenAI Models that support audio input)

@@ -1477,32 +1477,12 @@ func convertResponseFormatToTool(
 		return nil, nil
 	}
 
-	responseFormatMap, ok := schemas.SafeExtractOrderedMap(*params.ResponseFormat)
-	if !ok || responseFormatMap == nil {
+	rf := params.ResponseFormat
+	if rf.Type != "json_schema" || rf.JSONSchema == nil {
 		return nil, nil
 	}
 
-	// Check if type is "json_schema"
-	formatTypeRaw, ok := responseFormatMap.Get("type")
-	if !ok {
-		return nil, nil
-	}
-	formatType, ok := schemas.SafeExtractString(formatTypeRaw)
-	if !ok || formatType != "json_schema" {
-		return nil, nil
-	}
-
-	// Extract json_schema object
-	jsonSchemaRaw, ok := responseFormatMap.Get("json_schema")
-	if !ok {
-		return nil, nil
-	}
-	jsonSchemaObj, ok := schemas.SafeExtractOrderedMap(jsonSchemaRaw)
-	if !ok || jsonSchemaObj == nil {
-		return nil, nil
-	}
-
-	schemaObj, ok := jsonSchemaObj.Get("schema")
+	schemaObj, ok := rf.SchemaOrderedMap()
 	if !ok {
 		return nil, nil
 	}
@@ -1511,23 +1491,19 @@ func convertResponseFormatToTool(
 	// path; native `output_config.format` is intentionally avoided due to
 	// Converse's inconsistent support across Claude variants.
 
-	// Extract name and schema
-	toolNameRaw, hasName := jsonSchemaObj.Get("name")
-	toolName, ok := schemas.SafeExtractString(toolNameRaw)
-	if !hasName || !ok || toolName == "" {
+	// Extract name
+	toolName := ""
+	if rf.JSONSchema.Name != nil {
+		toolName = *rf.JSONSchema.Name
+	}
+	if toolName == "" {
 		toolName = "json_response"
 	}
 
 	// Extract description from schema if available
 	description := "Returns structured JSON output"
-	if schemaMap, ok := schemas.SafeExtractOrderedMap(schemaObj); ok && schemaMap != nil {
-		if descRaw, hasDesc := schemaMap.Get("description"); hasDesc {
-			if desc, ok := schemas.SafeExtractString(descRaw); ok && desc != "" {
-				description = desc
-			}
-		}
-	} else if schemaMap, ok := schemaObj.(map[string]interface{}); ok {
-		if desc, ok := schemaMap["description"].(string); ok && desc != "" {
+	if descRaw, hasDesc := schemaObj.Get("description"); hasDesc {
+		if desc, ok := schemas.SafeExtractString(descRaw); ok && desc != "" {
 			description = desc
 		}
 	}

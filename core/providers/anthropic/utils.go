@@ -2263,31 +2263,21 @@ func convertChatResponseFormatToTool(ctx *schemas.BifrostContext, params *schema
 		return nil
 	}
 
-	// ResponseFormat is stored as interface{}, need to parse it
-	responseFormatMap, ok := (*params.ResponseFormat).(map[string]interface{})
-	if !ok {
-		return nil
-	}
-
-	// Check if type is "json_schema"
-	formatType, ok := responseFormatMap["type"].(string)
-	if !ok || formatType != "json_schema" {
-		return nil
-	}
-
-	// Extract json_schema object
-	jsonSchemaObj, ok := responseFormatMap["json_schema"].(map[string]interface{})
-	if !ok {
+	rf := params.ResponseFormat
+	if rf.Type != "json_schema" || rf.JSONSchema == nil {
 		return nil
 	}
 
 	// Extract name and schema
-	toolName, ok := jsonSchemaObj["name"].(string)
-	if !ok || toolName == "" {
+	toolName := ""
+	if rf.JSONSchema.Name != nil {
+		toolName = *rf.JSONSchema.Name
+	}
+	if toolName == "" {
 		toolName = "json_response"
 	}
 
-	schemaOrdered, ok := schemas.SafeExtractOrderedMap(jsonSchemaObj["schema"])
+	schemaOrdered, ok := rf.SchemaOrderedMap()
 	if !ok {
 		return nil
 	}
@@ -3446,24 +3436,8 @@ func normalizeOrderedSchemaForAnthropic(om *schemas.OrderedMap) *schemas.Ordered
 //	  "schema": {...},
 //	  "strict": true
 //	}
-func convertChatResponseFormatToAnthropicOutputFormat(responseFormat *interface{}) json.RawMessage {
-	if responseFormat == nil {
-		return nil
-	}
-
-	formatMap, ok := (*responseFormat).(map[string]interface{})
-	if !ok {
-		return nil
-	}
-
-	formatType, ok := formatMap["type"].(string)
-	if !ok || formatType != "json_schema" {
-		return nil
-	}
-
-	// Extract the nested json_schema object
-	jsonSchemaObj, ok := formatMap["json_schema"].(map[string]interface{})
-	if !ok {
+func convertChatResponseFormatToAnthropicOutputFormat(responseFormat *schemas.ChatResponseFormat) json.RawMessage {
+	if responseFormat == nil || responseFormat.Type != "json_schema" {
 		return nil
 	}
 
@@ -3471,10 +3445,10 @@ func convertChatResponseFormatToAnthropicOutputFormat(responseFormat *interface{
 	// Note: name, description, and strict are NOT included as they are not permitted
 	// in Anthropic's GA structured outputs API (output_config.format)
 	outputFormat := map[string]interface{}{
-		"type": formatType,
+		"type": responseFormat.Type,
 	}
 
-	if schema, ok := schemas.SafeExtractOrderedMap(jsonSchemaObj["schema"]); ok {
+	if schema, ok := responseFormat.SchemaOrderedMap(); ok {
 		// Normalize the schema to handle type arrays like ["string", "null"]
 		outputFormat["schema"] = normalizeOrderedSchemaForAnthropic(schema)
 	}

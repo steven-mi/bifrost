@@ -412,10 +412,9 @@ func TestOpenAIChatStructuredOutputRequestParserAndConverter(t *testing.T) {
 	assert.Equal(t, "gemini-2.5-flash", bifrostReq.ChatRequest.Model)
 	assert.False(t, req.(*openai.OpenAIChatRequest).IsStreamingRequested())
 
-	responseFormat, ok := (*bifrostReq.ChatRequest.Params.ResponseFormat).(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "json_schema", responseFormat["type"])
-	assert.Contains(t, responseFormat, "json_schema")
+	responseFormat := bifrostReq.ChatRequest.Params.ResponseFormat
+	assert.Equal(t, "json_schema", responseFormat.Type)
+	assert.NotNil(t, responseFormat.JSONSchema)
 }
 
 // TestCreateHandler_AnthropicRouteSetsPassthroughFlags verifies that a Claude

@@ -1149,36 +1149,29 @@ func (cr *BifrostChatRequest) ToResponsesRequest() *BifrostResponsesRequest {
 		}
 
 		if cr.Params.ResponseFormat != nil {
-			if rfMap, ok := (*cr.Params.ResponseFormat).(map[string]interface{}); ok {
-				if fmtType, ok := rfMap["type"].(string); ok {
-					if brr.Params.Text == nil {
-						brr.Params.Text = &ResponsesTextConfig{}
-					}
-					format := &ResponsesTextConfigFormat{Type: fmtType}
-					validFormat := true
-					if fmtType == "json_schema" {
-						jsObj, ok := rfMap["json_schema"].(map[string]interface{})
-						if !ok {
-							validFormat = false
-						} else {
-							if name, ok := jsObj["name"].(string); ok {
-								format.Name = &name
-							}
-							if desc, ok := jsObj["description"].(string); ok {
-								format.Description = &desc
-							}
-							if strict, ok := jsObj["strict"].(bool); ok {
-								format.Strict = &strict
-							}
-							if schema, ok := jsObj["schema"]; ok {
-								format.JSONSchema = JSONSchemaFromMap(schema)
-							}
-						}
-					}
-					if validFormat {
-						brr.Params.Text.Format = format
+			rf := cr.Params.ResponseFormat
+			if brr.Params.Text == nil {
+				brr.Params.Text = &ResponsesTextConfig{}
+			}
+			// Chat nests name/description/strict inside json_schema; the Responses
+			// format lifts them to the format level and carries the schema object
+			// under `schema`. Order is preserved via JSONSchemaFromMap (OrderedMap).
+			format := &ResponsesTextConfigFormat{Type: rf.Type}
+			validFormat := true
+			if rf.Type == "json_schema" {
+				if rf.JSONSchema == nil {
+					validFormat = false
+				} else {
+					format.Name = rf.JSONSchema.Name
+					format.Description = rf.JSONSchema.Description
+					format.Strict = rf.JSONSchema.Strict
+					if schema, ok := rf.SchemaOrderedMap(); ok {
+						format.JSONSchema = JSONSchemaFromMap(schema)
 					}
 				}
+			}
+			if validFormat {
+				brr.Params.Text.Format = format
 			}
 		}
 
@@ -1272,25 +1265,27 @@ func (brr *BifrostResponsesRequest) ToChatRequest() *BifrostChatRequest {
 
 		if brr.Params.Text != nil && brr.Params.Text.Format != nil {
 			f := brr.Params.Text.Format
-			rfMap := map[string]interface{}{"type": f.Type}
-			if f.Type == "json_schema" {
-				jsObj := map[string]interface{}{}
-				if f.Name != nil {
-					jsObj["name"] = *f.Name
+			rf := &ChatResponseFormat{Type: f.Type}
+			if f.Type == "json_schema" && f.JSONSchema != nil {
+				// Chat nests name/description/strict + schema under json_schema.
+				js := &ResponsesTextConfigFormatJSONSchema{
+					Name:        f.Name,
+					Description: f.Description,
+					Strict:      f.Strict,
 				}
-				if f.Description != nil {
-					jsObj["description"] = *f.Description
+				switch schema := f.JSONSchema.ToMap().(type) {
+				case *OrderedMap:
+					js.Schema = &JSONSchemaOrBool{SchemaMap: schema}
+				case map[string]interface{}:
+					if om, ok := SafeExtractOrderedMap(schema); ok {
+						js.Schema = &JSONSchemaOrBool{SchemaMap: om}
+					}
+				case bool:
+					js.Schema = &JSONSchemaOrBool{SchemaBool: &schema}
 				}
-				if f.Strict != nil {
-					jsObj["strict"] = *f.Strict
-				}
-				if schemaMap := f.JSONSchema.ToMap(); schemaMap != nil {
-					jsObj["schema"] = schemaMap
-				}
-				rfMap["json_schema"] = jsObj
+				rf.JSONSchema = js
 			}
-			var rf interface{} = rfMap
-			bcr.Params.ResponseFormat = &rf
+			bcr.Params.ResponseFormat = rf
 		}
 
 		// Handle Verbosity from Text config

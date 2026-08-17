@@ -85,27 +85,21 @@ func ToHuggingFaceChatCompletionRequest(bifrostReq *schemas.BifrostChatRequest) 
 			hfReq.TopP = params.TopP
 		}
 
-		// Handle response format (direct type assertion to avoid marshal→unmarshal round-trip)
+		// Handle response format. The json_schema wrapper is marshalled from the
+		// order-preserving typed schema (HuggingFaceJSONSchema.Schema is a
+		// json.RawMessage, so the client's schema key order is retained verbatim).
 		if params.ResponseFormat != nil {
-			var hfRF *HuggingFaceResponseFormat
-			if rfMap, ok := (*params.ResponseFormat).(map[string]interface{}); ok {
-				hfRF = &HuggingFaceResponseFormat{}
-				if t, ok := rfMap["type"].(string); ok {
-					hfRF.Type = t
+			hfRF := &HuggingFaceResponseFormat{Type: params.ResponseFormat.Type}
+			if params.ResponseFormat.JSONSchema != nil {
+				jsBytes, err := providerUtils.MarshalSorted(params.ResponseFormat.JSONSchema)
+				if err != nil {
+					return nil, fmt.Errorf("failed to marshal json_schema: %w", err)
 				}
-				if jsVal, ok := rfMap["json_schema"]; ok {
-					jsBytes, err := providerUtils.MarshalSorted(jsVal)
-					if err != nil {
-						return nil, fmt.Errorf("failed to marshal json_schema: %w", err)
-					}
-					var hfSchema HuggingFaceJSONSchema
-					if err := sonic.Unmarshal(jsBytes, &hfSchema); err != nil {
-						return nil, fmt.Errorf("failed to unmarshal json_schema: %w", err)
-					}
-					hfRF.JSONSchema = &hfSchema
+				var hfSchema HuggingFaceJSONSchema
+				if err := sonic.Unmarshal(jsBytes, &hfSchema); err != nil {
+					return nil, fmt.Errorf("failed to unmarshal json_schema: %w", err)
 				}
-			} else if converted, err := schemas.ConvertViaJSON[HuggingFaceResponseFormat](*params.ResponseFormat); err == nil {
-				hfRF = &converted
+				hfRF.JSONSchema = &hfSchema
 			}
 			hfReq.ResponseFormat = hfRF
 		}

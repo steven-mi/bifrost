@@ -92,8 +92,7 @@ func cloneChatParameters(params *schemas.ChatParameters) *schemas.ChatParameters
 		cloned.Reasoning = &reasoning
 	}
 	if params.ResponseFormat != nil {
-		responseFormat := cloneAnyValue(*params.ResponseFormat)
-		cloned.ResponseFormat = &responseFormat
+		cloned.ResponseFormat = params.ResponseFormat.Clone()
 	}
 	if params.StreamOptions != nil {
 		streamOptions := *params.StreamOptions

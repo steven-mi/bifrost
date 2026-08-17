@@ -116,17 +116,17 @@ func testStructuredOutputChatWithValue(t *testing.T, client *bifrost.Bifrost, ct
 			Input:    chatMessages,
 			Params: &schemas.ChatParameters{
 				MaxCompletionTokens: bifrost.Ptr(5000),
-				ResponseFormat: func() *interface{} {
-					var format interface{} = map[string]interface{}{
-						"type": "json_schema",
-						"json_schema": map[string]interface{}{
-							"name":   "decision_schema",
-							"strict": true,
-							"schema": structuredOutputSchema,
-						},
-					}
-					return &format
-				}(),
+				ResponseFormat: &schemas.ChatResponseFormat{
+					Type: "json_schema",
+					JSONSchema: &schemas.ResponsesTextConfigFormatJSONSchema{
+						Name:   bifrost.Ptr("decision_schema"),
+						Strict: bifrost.Ptr(true),
+						Schema: func() *schemas.JSONSchemaOrBool {
+							om, _ := schemas.SafeExtractOrderedMap(structuredOutputSchema)
+							return &schemas.JSONSchemaOrBool{SchemaMap: om}
+						}(),
+					},
+				},
 			},
 			Fallbacks: testConfig.Fallbacks,
 		}
@@ -249,17 +249,17 @@ func RunStructuredOutputChatStreamTest(t *testing.T, client *bifrost.Bifrost, ct
 			Input:    chatMessages,
 			Params: &schemas.ChatParameters{
 				MaxCompletionTokens: bifrost.Ptr(5000),
-				ResponseFormat: func() *interface{} {
-					var format interface{} = map[string]interface{}{
-						"type": "json_schema",
-						"json_schema": map[string]interface{}{
-							"name":   "decision_schema",
-							"strict": true,
-							"schema": structuredOutputSchema,
-						},
-					}
-					return &format
-				}(),
+				ResponseFormat: &schemas.ChatResponseFormat{
+					Type: "json_schema",
+					JSONSchema: &schemas.ResponsesTextConfigFormatJSONSchema{
+						Name:   bifrost.Ptr("decision_schema"),
+						Strict: bifrost.Ptr(true),
+						Schema: func() *schemas.JSONSchemaOrBool {
+							om, _ := schemas.SafeExtractOrderedMap(structuredOutputSchema)
+							return &schemas.JSONSchemaOrBool{SchemaMap: om}
+						}(),
+					},
+				},
 			},
 			Fallbacks: testConfig.Fallbacks,
 		}
