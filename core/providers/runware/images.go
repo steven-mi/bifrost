@@ -2,6 +2,7 @@ package runware
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
@@ -63,6 +64,10 @@ func ToRunwareImageEditRequest(bifrostReq *schemas.BifrostImageEditRequest) (*Ru
 		return nil, fmt.Errorf("at least one input image is required")
 	}
 
+	if isRunwareUpscaleEdit(bifrostReq.Params) {
+		return toRunwareUpscaleRequest(bifrostReq)
+	}
+
 	width, height := defaultRunwareWidth, defaultRunwareHeight
 	request := &RunwareInferenceRequest{
 		TaskType:       taskTypeImageInference,
@@ -97,6 +102,56 @@ func ToRunwareImageEditRequest(bifrostReq *schemas.BifrostImageEditRequest) (*Ru
 		}
 
 		request.ExtraParams = params.ExtraParams
+	}
+
+	return request, nil
+}
+
+// isRunwareUpscaleEdit reports whether an image edit request selects the upscale task type.
+func isRunwareUpscaleEdit(params *schemas.ImageEditParameters) bool {
+	if params == nil || params.Type == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(*params.Type), "upscale")
+}
+
+// toRunwareUpscaleRequest converts an image edit request with type "upscale" into a Runware
+// upscale task. The input image is nested under "inputs"; prompt, dimensions and steps do not
+// apply to this task type, so they are left unset. Upscaler-specific fields (upscaleFactor,
+// targetMegapixels, settings) are read from extra params under their Runware-native names.
+func toRunwareUpscaleRequest(bifrostReq *schemas.BifrostImageEditRequest) (*RunwareInferenceRequest, error) {
+	image := providerUtils.FileBytesToBase64DataURL(bifrostReq.Input.Images[0].Image)
+	request := &RunwareInferenceRequest{
+		TaskType:    taskTypeUpscale,
+		TaskUUID:    uuid.New().String(),
+		Model:       bifrostReq.Model,
+		Inputs:      &RunwareInputs{Image: &image},
+		IncludeCost: new(true),
+	}
+
+	if bifrostReq.Params == nil {
+		return request, nil
+	}
+	params := bifrostReq.Params
+
+	request.OutputType = runwareOutputType(params.ResponseFormat)
+	request.OutputFormat = runwareOutputFormat(params.OutputFormat)
+	request.OutputQuality = params.OutputCompression
+	request.ExtraParams = params.ExtraParams
+
+	// Consume the fields promoted to typed properties so they are not also re-sent verbatim
+	// when extra-param passthrough is enabled.
+	if v, ok := schemas.SafeExtractInt(request.ExtraParams["upscaleFactor"]); ok {
+		delete(request.ExtraParams, "upscaleFactor")
+		request.UpscaleFactor = &v
+	}
+	if v, ok := schemas.SafeExtractInt(request.ExtraParams["targetMegapixels"]); ok {
+		delete(request.ExtraParams, "targetMegapixels")
+		request.TargetMegapixels = &v
+	}
+	if v, ok := runwareSettings(request.ExtraParams["settings"]); ok {
+		delete(request.ExtraParams, "settings")
+		request.Settings = v
 	}
 
 	return request, nil

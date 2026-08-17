@@ -59,6 +59,95 @@ func TestToRunwareVideoGenerationRequest_3DOmitsWidthHeight(t *testing.T) {
 	}
 }
 
+// type="3d" selects the 3D task without the caller knowing Runware's task type names, and pulls
+// settings out of extra params so model tuning reaches the wire as a nested object.
+func TestToRunwareVideoGenerationRequest_3DTypeParam(t *testing.T) {
+	req := &schemas.BifrostVideoGenerationRequest{
+		Model: "tencent:hunyuan-3d@3.1-rapid",
+		Input: &schemas.VideoGenerationInput{Prompt: "a ceramic teapot"},
+		Params: &schemas.VideoGenerationParameters{
+			Type:        new("3d"),
+			ExtraParams: map[string]any{"settings": `{"pbr":true}`},
+		},
+	}
+
+	out, err := ToRunwareVideoGenerationRequest(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.TaskType != taskType3DInference {
+		t.Fatalf("taskType = %q, want %q", out.TaskType, taskType3DInference)
+	}
+	if out.Settings["pbr"] != true {
+		t.Fatalf("settings = %+v, want pbr=true", out.Settings)
+	}
+	if _, ok := out.ExtraParams["settings"]; ok {
+		t.Fatalf("settings should be consumed from ExtraParams, got %+v", out.ExtraParams)
+	}
+	if out.IncludeCost == nil || !*out.IncludeCost {
+		t.Fatalf("3D has no datasheet rate, so includeCost must be set")
+	}
+}
+
+// Image-to-3D routes the reference image into the nested inputs object rather than frameImages,
+// which the 3D task type does not accept. The singular/array form is per-model.
+func TestToRunwareVideoGenerationRequest_3DInputArity(t *testing.T) {
+	build := func(model string) *RunwareInferenceRequest {
+		t.Helper()
+		out, err := ToRunwareVideoGenerationRequest(&schemas.BifrostVideoGenerationRequest{
+			Model: model,
+			Input: &schemas.VideoGenerationInput{InputReference: new("https://assets.runware.ai/a.jpg")},
+			Params: &schemas.VideoGenerationParameters{
+				Type: new("3d"),
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error for %s: %v", model, err)
+		}
+		if len(out.FrameImages) != 0 {
+			t.Fatalf("%s: 3D must not use frameImages, got %+v", model, out.FrameImages)
+		}
+		return out
+	}
+
+	singular := build("tencent:hunyuan-3d@3.1-rapid")
+	if singular.Inputs == nil || singular.Inputs.Image == nil || len(singular.Inputs.Images) != 0 {
+		t.Fatalf("rapid expects inputs.image, got %+v", singular.Inputs)
+	}
+
+	array := build("tencent:hunyuan-3d@3.1-pro")
+	if array.Inputs == nil || len(array.Inputs.Images) != 1 || array.Inputs.Image != nil {
+		t.Fatalf("pro expects inputs.images[], got %+v", array.Inputs)
+	}
+}
+
+// Video generation is unaffected: no type means videoInference, and the reference image still
+// anchors to the first frame.
+func TestToRunwareVideoGenerationRequest_VideoInputUnchanged(t *testing.T) {
+	out, err := ToRunwareVideoGenerationRequest(&schemas.BifrostVideoGenerationRequest{
+		Model: "klingai:kling-video@3-pro",
+		Input: &schemas.VideoGenerationInput{
+			Prompt:         "a red bird flying",
+			InputReference: new("https://assets.runware.ai/a.jpg"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.TaskType != taskTypeVideoInference {
+		t.Fatalf("taskType = %q, want %q", out.TaskType, taskTypeVideoInference)
+	}
+	if len(out.FrameImages) != 1 || out.FrameImages[0].Frame == nil || *out.FrameImages[0].Frame != "first" {
+		t.Fatalf("video must keep frameImages anchoring, got %+v", out.FrameImages)
+	}
+	if out.Inputs != nil {
+		t.Fatalf("video must not use the nested inputs object, got %+v", out.Inputs)
+	}
+	if out.IncludeCost != nil {
+		t.Fatalf("video billing is unchanged in this phase, got includeCost=%v", *out.IncludeCost)
+	}
+}
+
 // A 3D task result exposes its glb asset under outputs.files[]; the mapper surfaces it as a
 // VideoOutput URL with the model/gltf-binary content type and a completed status.
 func TestToBifrostVideoGenerationResponse_3DOutputs(t *testing.T) {

@@ -23,14 +23,9 @@ func ToRunwareVideoGenerationRequest(bifrostReq *schemas.BifrostVideoGenerationR
 		return nil, fmt.Errorf("input is required")
 	}
 
-	// Resolve the task type from extra_params before building the request; it decides which
-	// modality-specific defaults apply below.
-	taskType := taskTypeVideoInference
-	if bifrostReq.Params != nil {
-		if override, ok := schemas.SafeExtractString(bifrostReq.Params.ExtraParams["taskType"]); ok && override != "" {
-			taskType = override
-		}
-	}
+	// Resolve the task type before building the request; it decides which modality-specific
+	// defaults apply below.
+	taskType := runwareVideoTaskType(bifrostReq.Params)
 	isVideo := taskType == taskTypeVideoInference
 
 	request := &RunwareInferenceRequest{
@@ -51,13 +46,27 @@ func ToRunwareVideoGenerationRequest(bifrostReq *schemas.BifrostVideoGenerationR
 		request.PositivePrompt = &bifrostReq.Input.Prompt
 	}
 
-	// Input reference image (image-to-video): anchored to the first frame.
+	// Input reference image. Video anchors it to the first frame; 3D takes it as a nested input,
+	// in the singular or array form the model expects.
 	if bifrostReq.Input.InputReference != nil && *bifrostReq.Input.InputReference != "" {
 		sanitizedURL, err := schemas.SanitizeImageURL(*bifrostReq.Input.InputReference)
 		if err != nil {
 			return nil, fmt.Errorf("invalid input reference: %w", err)
 		}
-		request.FrameImages = []RunwareFrameImage{{InputImage: sanitizedURL, Frame: new("first")}}
+		if taskType == taskType3DInference {
+			if uses3DImageArrayInput(bifrostReq.Model) {
+				request.Inputs = &RunwareInputs{Images: []string{sanitizedURL}}
+			} else {
+				request.Inputs = &RunwareInputs{Image: &sanitizedURL}
+			}
+		} else {
+			request.FrameImages = []RunwareFrameImage{{InputImage: sanitizedURL, Frame: new("first")}}
+		}
+	}
+
+	// 3D has no datasheet rate, so ask Runware to report the exact task cost.
+	if taskType == taskType3DInference {
+		request.IncludeCost = new(true)
 	}
 
 	if bifrostReq.Params != nil {
@@ -80,9 +89,30 @@ func ToRunwareVideoGenerationRequest(bifrostReq *schemas.BifrostVideoGenerationR
 		}
 
 		request.ExtraParams = params.ExtraParams
+
+		if v, ok := runwareSettings(request.ExtraParams["settings"]); ok {
+			delete(request.ExtraParams, "settings")
+			request.Settings = v
+		}
 	}
 
 	return request, nil
+}
+
+// runwareVideoTaskType resolves the Runware task type for a /videos request. The neutral "type"
+// parameter selects the operation, the taskType extra param stays as a raw escape hatch for task
+// types Bifrost does not model, and video generation is the default.
+func runwareVideoTaskType(params *schemas.VideoGenerationParameters) string {
+	if params == nil {
+		return taskTypeVideoInference
+	}
+	if params.Type != nil && strings.EqualFold(strings.TrimSpace(*params.Type), "3d") {
+		return taskType3DInference
+	}
+	if override, ok := schemas.SafeExtractString(params.ExtraParams["taskType"]); ok && override != "" {
+		return override
+	}
+	return taskTypeVideoInference
 }
 
 // ToBifrostVideoGenerationResponse converts a Runware task result to a Bifrost video response.

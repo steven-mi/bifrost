@@ -12,6 +12,8 @@ const (
 	taskType3DInference = "3dInference"
 	// taskTypeGetResponse polls an async task (e.g. video, 3D) by its taskUUID.
 	taskTypeGetResponse = "getResponse"
+	// taskTypeUpscale enlarges an existing image; the model selects the upscaler.
+	taskTypeUpscale = "upscale"
 )
 
 // deliveryMethodAsync queues a task instead of holding the connection open; used for video.
@@ -21,6 +23,13 @@ const deliveryMethodAsync = "async"
 type RunwareFrameImage struct {
 	InputImage string  `json:"inputImage"`      // image UUID, URL, or base64/data-URI string
 	Frame      *string `json:"frame,omitempty"` // "first" | "last"
+}
+
+// RunwareInputs holds a task's media inputs. Runware nests them under "inputs" while scalar
+// parameters stay top-level.
+type RunwareInputs struct {
+	Image  *string  `json:"image,omitempty"`  // image UUID, URL, or base64/data-URI string
+	Images []string `json:"images,omitempty"` // array form, used by some 3D models
 }
 
 // RunwareInferenceRequest is a single Runware task. taskType selects the operation; each
@@ -50,6 +59,14 @@ type RunwareInferenceRequest struct {
 	Duration        *float64            `json:"duration,omitempty"`
 	FrameImages     []RunwareFrameImage `json:"frameImages,omitempty"` // image-to-video
 	ReferenceImages []string            `json:"referenceImages,omitempty"`
+
+	// Upscale-only. UpscaleFactor and TargetMegapixels are mutually exclusive.
+	Inputs           *RunwareInputs         `json:"inputs,omitempty"`
+	UpscaleFactor    *int                   `json:"upscaleFactor,omitempty"`
+	TargetMegapixels *int                   `json:"targetMegapixels,omitempty"`
+	OutputQuality    *int                   `json:"outputQuality,omitempty"`
+	Settings         map[string]interface{} `json:"settings,omitempty"` // model-specific tuning
+	IncludeCost      *bool                  `json:"includeCost,omitempty"`
 
 	// ExtraParams carries provider-native fields with no Bifrost equivalent
 	// (CFGScale, scheduler, strength, maskMargin, outpaint, fps, lora, ...). Merged into

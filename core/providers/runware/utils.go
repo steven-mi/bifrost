@@ -3,6 +3,8 @@ package runware
 import (
 	"strconv"
 	"strings"
+
+	"github.com/bytedance/sonic"
 )
 
 // Runware requires explicit pixel dimensions; default when the caller omits a size.
@@ -70,6 +72,21 @@ func runwareOutputFormat(outputFormat *string) *string {
 		return nil
 	}
 	return &out
+}
+
+// runwareSettings coerces a "settings" extra param into Runware's nested settings object.
+// Multipart form values arrive as a JSON string; JSON callers send an object directly.
+func runwareSettings(value interface{}) (map[string]interface{}, bool) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		return v, len(v) > 0
+	case string:
+		var settings map[string]interface{}
+		if err := sonic.Unmarshal([]byte(v), &settings); err == nil && len(settings) > 0 {
+			return settings, true
+		}
+	}
+	return nil, false
 }
 
 // contentTypeForAssetURL infers a MIME type from an artifact URL's file extension. Runware's
