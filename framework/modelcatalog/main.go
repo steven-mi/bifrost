@@ -20,6 +20,7 @@ import (
 	providerUtils "github.com/maximhq/bifrost/core/providers/utils"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
+	"github.com/maximhq/bifrost/framework/gencache"
 	"github.com/maximhq/bifrost/framework/modelcatalog/datasheet"
 	"github.com/maximhq/bifrost/framework/modelcatalog/keyconfig"
 	"github.com/maximhq/bifrost/framework/modelcatalog/live"
@@ -34,11 +35,8 @@ type ModelCatalog struct {
 	live      *live.Store
 	keyconf   *keyconfig.Store
 
-	// providerMemo caches GetProvidersForModel per model, stamped with
-	// catalogGeneration() at compute time; any store write invalidates every
-	// entry. Capped at providerMemoMaxEntries, flushed on overflow.
-	providerMemoMu sync.RWMutex
-	providerMemo   map[string]providerMemoEntry
+	providersForModel *gencache.Cache[[]schemas.ModelProvider]
+	modelsForProvider *gencache.Cache[[]string]
 
 	// MCP library sync configuration (protected by syncMu)
 	mcpLibraryURL          string
@@ -95,11 +93,11 @@ func Init(ctx context.Context, config *Config, configStore configstore.ConfigSto
 			ModelParametersURL: modelParametersURL,
 			SyncInterval:       syncInterval,
 		}),
-		live:         live.New(logger),
-		keyconf:      keyconfig.New(logger),
-		providerMemo: make(map[string]providerMemoEntry),
-		done:         make(chan struct{}),
+		live:    live.New(logger),
+		keyconf: keyconfig.New(logger),
+		done:    make(chan struct{}),
 	}
+	mc.initCaches()
 	mc.syncCtx, mc.syncCancel = context.WithCancel(ctx)
 
 	// If Init returns an error the caller never owns mc and will never call
@@ -614,12 +612,14 @@ func (mc *ModelCatalog) knownProviders() []schemas.ModelProvider {
 // NewTestCatalog constructs a minimal ModelCatalog for unit tests. Does not
 // start background workers or hit external services.
 func NewTestCatalog(baseModelIndex map[string]string) *ModelCatalog {
-	return &ModelCatalog{
+	mc := &ModelCatalog{
 		datasheet: datasheet.NewTestStore(baseModelIndex),
 		live:      live.New(nil),
 		keyconf:   keyconfig.New(nil),
 		done:      make(chan struct{}),
 	}
+	mc.initCaches()
+	return mc
 }
 
 // NewTestCatalogWithDatasheet wraps a caller-provided datasheet.Store (e.g. one
@@ -627,10 +627,12 @@ func NewTestCatalog(baseModelIndex map[string]string) *ModelCatalog {
 // LoadFromURLIntoMemory) in a ModelCatalog, so tests in other packages can
 // exercise real pricing/cost computation without reaching the network.
 func NewTestCatalogWithDatasheet(ds *datasheet.Store) *ModelCatalog {
-	return &ModelCatalog{
+	mc := &ModelCatalog{
 		datasheet: ds,
 		live:      live.New(nil),
 		keyconf:   keyconfig.New(nil),
 		done:      make(chan struct{}),
 	}
+	mc.initCaches()
+	return mc
 }
